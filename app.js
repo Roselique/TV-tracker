@@ -137,6 +137,9 @@
     seasonFields: document.getElementById("season-fields"),
     fType: document.getElementById("f-type"),
     fName: document.getElementById("f-name"),
+    fYear: document.getElementById("f-year"),
+    fMyScore: document.getElementById("f-my-score"),
+    fTmdbScore: document.getElementById("f-tmdb-score"),
     tmdbResults: document.getElementById("tmdb-results"),
     tmdbHint: document.getElementById("tmdb-hint"),
   };
@@ -184,6 +187,9 @@
     }
     if (state.sort === "updated") list.sort((a, b) => b.updatedAt - a.updatedAt);
     else if (state.sort === "added") list.sort((a, b) => b.createdAt - a.createdAt);
+    else if (state.sort === "tmdb_score")
+      list.sort((a, b) => (b.tmdbScore ?? -1) - (a.tmdbScore ?? -1));
+    else if (state.sort === "my_score") list.sort((a, b) => (b.myScore ?? -1) - (a.myScore ?? -1));
     else list.sort((a, b) => a.name.localeCompare(b.name));
     return list;
   }
@@ -244,6 +250,14 @@
     return t.status === "COMPLETED" ? "Watched" : "Movie";
   }
 
+  function scoreMetaLine(t) {
+    const parts = [];
+    if (t.year) parts.push(String(t.year));
+    if (t.tmdbScore != null) parts.push(`★ ${Math.round(t.tmdbScore * 10)}%`);
+    if (t.myScore != null) parts.push(`♥ ${t.myScore}`);
+    return parts.join(" · ");
+  }
+
   function renderGrid() {
     const list = visibleTitles();
     els.empty.hidden = list.length !== 0;
@@ -262,6 +276,7 @@
           ? `<a class="watch-link" href="${escapeHtml(t.watchUrl)}" target="_blank" rel="noopener noreferrer" title="Watch now" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M14 4h6v6M20 4l-9 9M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></a>`
           : "";
         const tag0 = (t.tags && t.tags[0]) || (t.type === "MOVIE" ? "Movie" : "Series");
+        const metaLine = scoreMetaLine(t);
 
         return `
         <div class="card">
@@ -269,7 +284,10 @@
             ${poster}
             <span class="status-badge" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
             ${watchLink}
-            <span class="progress-overlay">${escapeHtml(progressLabel(t))}</span>
+            <span class="progress-overlay">
+              ${metaLine ? `<span class="progress-overlay-meta">${escapeHtml(metaLine)}</span>` : ""}
+              <span class="progress-overlay-main">${escapeHtml(progressLabel(t))}</span>
+            </span>
           </button>
           <button class="card-title-btn" data-open="${t.id}">
             <div class="name">${escapeHtml(t.name)}</div>
@@ -373,6 +391,10 @@
     const genreNames = (result.genre_ids || []).map((id) => genreMap[id]).filter(Boolean);
     if (genreNames.length) document.getElementById("f-tags").value = genreNames.join(", ");
 
+    const dateStr = isMovie ? result.release_date : result.first_air_date;
+    els.fYear.value = dateStr ? dateStr.slice(0, 4) : "";
+    els.fTmdbScore.value = result.vote_average ? Number(result.vote_average.toFixed(1)) : "";
+
     hideTmdbResults();
 
     if (!isMovie) {
@@ -407,6 +429,9 @@
     document.getElementById("f-total-seasons").value = t?.totalSeasons ?? "";
     document.getElementById("f-total-episodes").value = t?.totalEpisodes ?? "";
     document.getElementById("f-notes").value = t?.notes || "";
+    els.fYear.value = t?.year ?? "";
+    els.fMyScore.value = t?.myScore ?? "";
+    els.fTmdbScore.value = t?.tmdbScore ?? "";
 
     toggleSeasonFields();
     els.backdrop.hidden = false;
@@ -430,6 +455,9 @@
 
     const totalSeasonsVal = document.getElementById("f-total-seasons").value;
     const totalEpisodesVal = document.getElementById("f-total-episodes").value;
+    const yearVal = els.fYear.value;
+    const myScoreVal = els.fMyScore.value;
+    const tmdbScoreVal = els.fTmdbScore.value;
 
     const data = {
       name,
@@ -443,6 +471,9 @@
       totalSeasons: totalSeasonsVal ? Number(totalSeasonsVal) : null,
       totalEpisodes: totalEpisodesVal ? Number(totalEpisodesVal) : null,
       notes: document.getElementById("f-notes").value,
+      year: yearVal ? Number(yearVal) : null,
+      myScore: myScoreVal ? Number(myScoreVal) : null,
+      tmdbScore: tmdbScoreVal ? Number(tmdbScoreVal) : null,
     };
 
     const now = Date.now();

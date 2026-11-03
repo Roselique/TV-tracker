@@ -27,8 +27,11 @@ configuration is needed.
 - Poster grid library with a status badge (plan to watch / watching / on
   hold / completed / dropped) in the corner of each card
 - Season & episode progress shown on every card
+- Release year, TMDB audience score, and your own personal rating shown on
+  each card
 - A "watch now" link per title that opens in a new tab
-- Filter by status and by genre/tag, plus search and sorting
+- Filter by status and by genre/tag; search; sort by recently updated/added,
+  name, audience score, or your own rating
 - Add, edit, and delete titles from a single form
 
 ## Adding a title
