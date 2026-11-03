@@ -148,6 +148,7 @@
     importFile: document.getElementById("import-file"),
     collectionBackdrop: document.getElementById("collection-backdrop"),
     collectionModalTitle: document.getElementById("collection-modal-title"),
+    collectionModalSubtitle: document.getElementById("collection-modal-subtitle"),
     collectionList: document.getElementById("collection-list"),
     closeCollectionModal: document.getElementById("close-collection-modal"),
   };
@@ -270,6 +271,20 @@
     return (t.collection || "").trim().toLowerCase();
   }
 
+  // Orders a collection's titles for display: explicit manual order
+  // (set by dragging in the collection panel) first, falling back to
+  // release year for anything not yet manually placed.
+  function collectionSortItems(items) {
+    return [...items].sort((a, b) => {
+      const ao = a.collectionOrder;
+      const bo = b.collectionOrder;
+      if (ao != null && bo != null) return ao - bo;
+      if (ao != null) return -1;
+      if (bo != null) return 1;
+      return (a.year ?? 9999) - (b.year ?? 9999);
+    });
+  }
+
   // Groups an already-filtered/sorted list into single titles and
   // collections (2+ titles sharing a non-empty `collection` field).
   // A group is placed at the position of its first-seen member, so it
@@ -349,10 +364,11 @@
   }
 
   function renderGroupCard(group) {
-    const chronological = [...group.items].sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
-    const withPoster = chronological.find((i) => i.posterUrl) || chronological[0];
+    const ordered = collectionSortItems(group.items);
+    const withPoster = ordered.find((i) => i.posterUrl) || ordered[0];
     const poster = posterMarkup(withPoster.posterUrl, group.collection);
     const icon = STATUS_ICONS[aggregateStatus(group.items)];
+    const completedCount = group.items.filter((i) => i.status === "COMPLETED").length;
 
     const years = group.items.map((i) => i.year).filter(Boolean);
     let yearLabel = "";
@@ -371,7 +387,7 @@
         <div class="poster-btn" data-group="${escapeHtml(group.key)}" role="button" tabindex="0">
           ${poster}
           <span class="status-badge" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
-          <span class="parts-badge">${group.items.length} parts</span>
+          <span class="parts-badge">${completedCount}/${group.items.length} done</span>
           ${
             yearLabel
               ? `<span class="progress-overlay"><span class="progress-overlay-meta">${escapeHtml(yearLabel)}</span></span>`
@@ -432,12 +448,16 @@
     });
   }
 
+  let dragSrcId = null;
+
   function openCollectionModal(key) {
     const items = titles.filter((t) => collectionKey(t) === key);
     if (items.length === 0) return;
-    const sorted = [...items].sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+    const sorted = collectionSortItems(items);
+    const completedCount = items.filter((t) => t.status === "COMPLETED").length;
 
     els.collectionModalTitle.textContent = items[0].collection.trim();
+    els.collectionModalSubtitle.textContent = `${completedCount}/${items.length} completed`;
     els.collectionList.innerHTML = sorted
       .map((t) => {
         const icon = STATUS_ICONS[t.status];
@@ -445,25 +465,71 @@
           ? `<img src="${escapeHtml(t.posterUrl)}" alt="" />`
           : `<span class="collection-row-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
         return `
-        <button type="button" class="collection-row" data-open-part="${t.id}">
+        <div class="collection-row" draggable="true" data-row-id="${t.id}" data-open-part="${t.id}" role="button" tabindex="0">
+          <span class="collection-row-handle" title="Drag to reorder"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="9" cy="6" r="1.4" fill="currentColor"/><circle cx="9" cy="12" r="1.4" fill="currentColor"/><circle cx="9" cy="18" r="1.4" fill="currentColor"/><circle cx="15" cy="6" r="1.4" fill="currentColor"/><circle cx="15" cy="12" r="1.4" fill="currentColor"/><circle cx="15" cy="18" r="1.4" fill="currentColor"/></svg></span>
           <span class="collection-row-poster">${poster}</span>
           <span class="collection-row-info">
             <span class="collection-row-name">${escapeHtml(t.name)}${t.year ? ` (${t.year})` : ""}</span>
             <span class="collection-row-meta">${escapeHtml(progressLabel(t))}</span>
           </span>
           <span class="collection-row-status" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
-        </button>`;
+        </div>`;
       })
       .join("");
 
-    els.collectionList.querySelectorAll("[data-open-part]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+    els.collectionList.querySelectorAll("[data-open-part]").forEach((row) => {
+      row.addEventListener("click", () => {
         closeCollectionModal();
-        openModal(btn.dataset.openPart);
+        openModal(row.dataset.openPart);
+      });
+      row.addEventListener("keydown", (e) => {
+        if (e.target === row && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          closeCollectionModal();
+          openModal(row.dataset.openPart);
+        }
+      });
+      row.addEventListener("dragstart", (e) => {
+        dragSrcId = row.dataset.rowId;
+        e.dataTransfer.effectAllowed = "move";
+        row.classList.add("dragging");
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        els.collectionList.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+      });
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (row.dataset.rowId !== dragSrcId) row.classList.add("drag-over");
+      });
+      row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        row.classList.remove("drag-over");
+        const targetId = row.dataset.rowId;
+        if (!dragSrcId || dragSrcId === targetId) return;
+        reorderCollectionItems(key, dragSrcId, targetId);
       });
     });
 
     els.collectionBackdrop.hidden = false;
+  }
+
+  function reorderCollectionItems(key, srcId, targetId) {
+    const items = titles.filter((t) => collectionKey(t) === key);
+    const ordered = collectionSortItems(items);
+    const fromIdx = ordered.findIndex((t) => t.id === srcId);
+    const toIdx = ordered.findIndex((t) => t.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = ordered.splice(fromIdx, 1);
+    ordered.splice(toIdx, 0, moved);
+    ordered.forEach((t, i) => {
+      t.collectionOrder = i;
+    });
+    saveTitles(titles);
+    openCollectionModal(key);
+    renderGrid();
   }
 
   function closeCollectionModal() {

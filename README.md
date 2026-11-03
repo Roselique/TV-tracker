@@ -41,10 +41,13 @@ configuration is needed.
   new device doesn't mean losing your list.
 - **Collections** — tag related titles (e.g. a trilogy, or a show and its
   spin-offs) with the same Collection name and they're grouped into one
-  stacked card instead of cluttering the grid; click it to see and open
-  each part. Auto-filled from TMDB for movie franchises that have an
-  official collection; everything else (most TV franchises, like a show
-  and its sequel series) you tag by hand.
+  stacked card instead of cluttering the grid, with a "2/3 done" badge
+  showing how many parts you've completed. Click it to open the parts
+  panel: drag to reorder them (the one on top becomes the stack's cover
+  poster), or click a part to open its own edit view. Auto-filled from
+  TMDB for movie franchises that have an official collection; everything
+  else (most TV franchises, like a show and its sequel series) you tag by
+  hand.
 
 ## Adding a title
 
