@@ -33,6 +33,20 @@ configuration is needed.
 
 ## Adding a title
 
-Click **Add title** and fill in the name, poster image URL, where-to-watch
-link, genres/tags (comma separated), and your current season/episode. Click
-any card afterwards to update your progress or status, or to delete it.
+Click **Add title** and start typing the name — matching series and movies
+from [TMDB](https://www.themoviedb.org) show up in a dropdown, and picking
+one auto-fills the poster, type, genres, and (for series) total seasons and
+episodes. You can still edit any of that, or skip the search and fill
+everything in by hand. Add the where-to-watch link and your current
+season/episode, then save. Click any card afterwards to update your
+progress or status, or to delete it.
+
+### About the TMDB API key
+
+`app.js` contains a TMDB "API Read Access Token," used only for searching
+titles and posters. It's a read-only, rate-limited key meant for exactly
+this kind of client-side use — TMDB's own docs expect it to ship in
+public/static projects like this one. It can't access your account or
+anything billing-related. If it's ever misused, regenerate it for free at
+themoviedb.org → Settings → API and swap the `TMDB_TOKEN` value in
+`app.js`.

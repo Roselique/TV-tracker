@@ -51,9 +51,11 @@
       </button>
     </div>
     <form id="title-form">
-      <div class="field">
+      <div class="field tmdb-field">
         <label>Name *</label>
-        <input type="text" id="f-name" required placeholder="e.g. The Fox's Love Refresher" />
+        <input type="text" id="f-name" required autocomplete="off" placeholder="e.g. The Fox's Love Refresher" />
+        <div class="tmdb-results" id="tmdb-results" hidden></div>
+        <p class="tmdb-hint" id="tmdb-hint" hidden>Fetching matches from TMDB…</p>
       </div>
 
       <div class="field-row">

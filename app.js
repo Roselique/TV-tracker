@@ -20,6 +20,42 @@
     DROPPED: { color: "#dc2626", svg: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>' },
   };
 
+  // TMDB API Read Access Token (public, client-side — see README for why).
+  const TMDB_TOKEN =
+    "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4MzgxZjE3YWU1ODAwODgyNWZjMGY0Yzc2M2Y4NjcwOSIsIm5iZiI6MTc5MzcyMjY1NC45NzYsInN1YiI6IjZhZWEwOTFlNDU3MzhkNjk2MGMzNGJiYyIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.hCHEgsuqgyKz8H1J0zfQ4BwMBz-40ogAOMdZMP9m_Qc";
+  const TMDB_API = "https://api.themoviedb.org/3";
+  const TMDB_POSTER_LIST = "https://image.tmdb.org/t/p/w92";
+  const TMDB_POSTER_FULL = "https://image.tmdb.org/t/p/w500";
+
+  const TMDB_MOVIE_GENRES = {
+    28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+    99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History",
+    27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance",
+    878: "Science Fiction", 10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+  };
+  const TMDB_TV_GENRES = {
+    10759: "Action & Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+    99: "Documentary", 18: "Drama", 10751: "Family", 10762: "Kids", 9648: "Mystery",
+    10763: "News", 10764: "Reality", 10765: "Sci-Fi & Fantasy", 10766: "Soap",
+    10767: "Talk", 10768: "War & Politics", 37: "Western",
+  };
+
+  async function tmdbFetch(path) {
+    const res = await fetch(`${TMDB_API}${path}`, {
+      headers: { accept: "application/json", Authorization: `Bearer ${TMDB_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`TMDB request failed (${res.status})`);
+    return res.json();
+  }
+
+  function debounce(fn, delay) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
   function uid() {
     return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -100,6 +136,9 @@
     closeModal: document.getElementById("close-modal"),
     seasonFields: document.getElementById("season-fields"),
     fType: document.getElementById("f-type"),
+    fName: document.getElementById("f-name"),
+    tmdbResults: document.getElementById("tmdb-results"),
+    tmdbHint: document.getElementById("tmdb-hint"),
   };
 
   function timeAgo(ts) {
@@ -256,10 +295,102 @@
     els.seasonFields.style.display = els.fType.value === "MOVIE" ? "none" : "grid";
   }
 
+  function hideTmdbResults() {
+    els.tmdbResults.hidden = true;
+    els.tmdbResults.innerHTML = "";
+    els.tmdbHint.hidden = true;
+  }
+
+  function renderTmdbResults(results) {
+    if (results.length === 0) {
+      els.tmdbResults.innerHTML = '<p class="tmdb-empty">No matches found — you can still fill this in by hand.</p>';
+      els.tmdbResults.hidden = false;
+      return;
+    }
+    els.tmdbResults.innerHTML = results
+      .map((r, i) => {
+        const title = r.media_type === "movie" ? r.title : r.name;
+        const date = r.media_type === "movie" ? r.release_date : r.first_air_date;
+        const year = date ? date.slice(0, 4) : "—";
+        const typeLabel = r.media_type === "movie" ? "Movie" : "Series";
+        const poster = r.poster_path
+          ? `<img class="tmdb-result-poster" src="${TMDB_POSTER_LIST}${r.poster_path}" alt="" />`
+          : `<span class="tmdb-result-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
+        return `
+        <button type="button" class="tmdb-result" data-index="${i}">
+          ${poster}
+          <span class="tmdb-result-info">
+            <span class="tmdb-result-title">${escapeHtml(title)}</span>
+            <span class="tmdb-result-meta">${typeLabel} · ${year}</span>
+          </span>
+        </button>`;
+      })
+      .join("");
+    els.tmdbResults.hidden = false;
+
+    els.tmdbResults.querySelectorAll("[data-index]").forEach((btn) => {
+      btn.addEventListener("click", () => selectTmdbResult(results[Number(btn.dataset.index)]));
+    });
+  }
+
+  async function searchTmdb(query) {
+    if (!query || query.trim().length < 2) {
+      hideTmdbResults();
+      return;
+    }
+    els.tmdbResults.hidden = true;
+    els.tmdbHint.textContent = "Searching TMDB…";
+    els.tmdbHint.hidden = false;
+    try {
+      const data = await tmdbFetch(
+        `/search/multi?query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`
+      );
+      const results = (data.results || [])
+        .filter((r) => r.media_type === "movie" || r.media_type === "tv")
+        .slice(0, 6);
+      els.tmdbHint.hidden = true;
+      renderTmdbResults(results);
+    } catch {
+      els.tmdbHint.textContent = "Couldn't reach TMDB — you can still fill this in by hand.";
+      els.tmdbHint.hidden = false;
+      els.tmdbResults.hidden = true;
+    }
+  }
+
+  async function selectTmdbResult(result) {
+    const isMovie = result.media_type === "movie";
+    const title = isMovie ? result.title : result.name;
+
+    els.fName.value = title;
+    els.fType.value = isMovie ? "MOVIE" : "SERIES";
+    toggleSeasonFields();
+
+    document.getElementById("f-poster").value = result.poster_path
+      ? `${TMDB_POSTER_FULL}${result.poster_path}`
+      : "";
+
+    const genreMap = isMovie ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES;
+    const genreNames = (result.genre_ids || []).map((id) => genreMap[id]).filter(Boolean);
+    if (genreNames.length) document.getElementById("f-tags").value = genreNames.join(", ");
+
+    hideTmdbResults();
+
+    if (!isMovie) {
+      try {
+        const details = await tmdbFetch(`/tv/${result.id}?language=en-US`);
+        if (details.number_of_seasons) document.getElementById("f-total-seasons").value = details.number_of_seasons;
+        if (details.number_of_episodes) document.getElementById("f-total-episodes").value = details.number_of_episodes;
+      } catch {
+        // Season/episode totals are a nice-to-have; ignore failures silently.
+      }
+    }
+  }
+
   function openModal(id) {
     state.modalTitleId = id || null;
     state.isAdding = !id;
     const t = id ? titles.find((x) => x.id === id) : null;
+    hideTmdbResults();
 
     els.modalTitle.textContent = t ? "Edit title" : "Add a title";
     els.submitBtn.textContent = t ? "Save changes" : "Add title";
@@ -342,6 +473,13 @@
   els.form.addEventListener("submit", handleSubmit);
   els.deleteBtn.addEventListener("click", handleDelete);
   els.fType.addEventListener("change", toggleSeasonFields);
+  els.fName.addEventListener(
+    "input",
+    debounce((e) => searchTmdb(e.target.value), 400)
+  );
+  document.addEventListener("click", (e) => {
+    if (!els.tmdbResults.hidden && !e.target.closest(".tmdb-field")) hideTmdbResults();
+  });
   els.search.addEventListener("input", (e) => {
     state.query = e.target.value;
     renderGrid();
