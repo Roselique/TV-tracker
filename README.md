@@ -26,13 +26,19 @@ configuration is needed.
 
 - Poster grid library with a status badge (plan to watch / watching / on
   hold / completed / dropped) in the corner of each card
-- Season & episode progress shown on every card
+- Season & episode progress shown on every card, with a one-click **+1
+  episode** button (or **mark as watched** for movies) right on the poster
+  — no need to open the edit form just to log progress
 - Release year, TMDB audience score, and your own personal rating shown on
   each card
 - A "watch now" link per title that opens in a new tab
 - Filter by status and by genre/tag; search; sort by recently updated/added,
   name, audience score, or your own rating
 - Add, edit, and delete titles from a single form
+- **Export / Import** — download your whole library as a JSON file and
+  restore it later. Since everything lives in this browser's local storage
+  only (see below), export a backup occasionally so a cleared cache or a
+  new device doesn't mean losing your list.
 
 ## Adding a title
 

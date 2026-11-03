@@ -142,6 +142,9 @@
     fTmdbScore: document.getElementById("f-tmdb-score"),
     tmdbResults: document.getElementById("tmdb-results"),
     tmdbHint: document.getElementById("tmdb-hint"),
+    exportBtn: document.getElementById("export-btn"),
+    importBtn: document.getElementById("import-btn"),
+    importFile: document.getElementById("import-file"),
   };
 
   function timeAgo(ts) {
@@ -278,17 +281,26 @@
         const tag0 = (t.tags && t.tags[0]) || (t.type === "MOVIE" ? "Movie" : "Series");
         const metaLine = scoreMetaLine(t);
 
+        const canQuickProgress = t.status !== "COMPLETED" && t.status !== "DROPPED";
+        let quickBtn = "";
+        if (canQuickProgress && t.type === "SERIES") {
+          quickBtn = `<button type="button" class="quick-progress" data-quick-episode="${t.id}" title="+1 episode"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>`;
+        } else if (canQuickProgress && t.type === "MOVIE") {
+          quickBtn = `<button type="button" class="quick-progress" data-quick-watched="${t.id}" title="Mark as watched"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
+        }
+
         return `
         <div class="card">
-          <button class="poster-btn" data-open="${t.id}">
+          <div class="poster-btn" data-open="${t.id}" role="button" tabindex="0">
             ${poster}
             <span class="status-badge" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
             ${watchLink}
+            ${quickBtn}
             <span class="progress-overlay">
               ${metaLine ? `<span class="progress-overlay-meta">${escapeHtml(metaLine)}</span>` : ""}
               <span class="progress-overlay-main">${escapeHtml(progressLabel(t))}</span>
             </span>
-          </button>
+          </div>
           <button class="card-title-btn" data-open="${t.id}">
             <div class="name">${escapeHtml(t.name)}</div>
             <div class="card-meta"><span>${escapeHtml(tag0)}</span><span>${timeAgo(t.updatedAt)}</span></div>
@@ -299,7 +311,44 @@
 
     els.grid.querySelectorAll("[data-open]").forEach((el) => {
       el.addEventListener("click", () => openModal(el.dataset.open));
+      el.addEventListener("keydown", (e) => {
+        if (e.target === el && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          openModal(el.dataset.open);
+        }
+      });
     });
+    els.grid.querySelectorAll("[data-quick-episode]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        quickAdvanceEpisode(btn.dataset.quickEpisode);
+      });
+    });
+    els.grid.querySelectorAll("[data-quick-watched]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        quickMarkWatched(btn.dataset.quickWatched);
+      });
+    });
+  }
+
+  function quickAdvanceEpisode(id) {
+    const t = titles.find((x) => x.id === id);
+    if (!t) return;
+    t.currentEpisode = (t.currentEpisode || 0) + 1;
+    if (t.status === "PLAN_TO_WATCH" || t.status === "ON_HOLD") t.status = "WATCHING";
+    t.updatedAt = Date.now();
+    saveTitles(titles);
+    render();
+  }
+
+  function quickMarkWatched(id) {
+    const t = titles.find((x) => x.id === id);
+    if (!t) return;
+    t.status = "COMPLETED";
+    t.updatedAt = Date.now();
+    saveTitles(titles);
+    render();
   }
 
   function render() {
@@ -496,6 +545,58 @@
     render();
   }
 
+  function exportData() {
+    const blob = new Blob([JSON.stringify(titles, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tv-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let incoming;
+      try {
+        incoming = JSON.parse(reader.result);
+      } catch {
+        alert("That file isn't valid JSON — couldn't import it.");
+        return;
+      }
+      if (!Array.isArray(incoming)) {
+        alert("That file doesn't look like a TV Tracker backup (expected a list of titles).");
+        return;
+      }
+      const existingIds = new Set(titles.map((t) => t.id));
+      let added = 0;
+      let skipped = 0;
+      for (const item of incoming) {
+        if (!item || typeof item.id !== "string" || typeof item.name !== "string") {
+          skipped++;
+          continue;
+        }
+        if (existingIds.has(item.id)) {
+          skipped++;
+          continue;
+        }
+        titles.push(item);
+        existingIds.add(item.id);
+        added++;
+      }
+      saveTitles(titles);
+      render();
+      alert(
+        `Imported ${added} title${added === 1 ? "" : "s"}.` +
+          (skipped ? ` Skipped ${skipped} (already in your library or invalid).` : "")
+      );
+    };
+    reader.readAsText(file);
+  }
+
   els.openAdd.addEventListener("click", () => openModal(null));
   els.closeModal.addEventListener("click", closeModal);
   els.backdrop.addEventListener("click", (e) => {
@@ -518,6 +619,13 @@
   els.sort.addEventListener("change", (e) => {
     state.sort = e.target.value;
     renderGrid();
+  });
+  els.exportBtn.addEventListener("click", exportData);
+  els.importBtn.addEventListener("click", () => els.importFile.click());
+  els.importFile.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importData(file);
+    e.target.value = "";
   });
 
   render();
