@@ -140,11 +140,16 @@
     fYear: document.getElementById("f-year"),
     fMyScore: document.getElementById("f-my-score"),
     fTmdbScore: document.getElementById("f-tmdb-score"),
+    fCollection: document.getElementById("f-collection"),
     tmdbResults: document.getElementById("tmdb-results"),
     tmdbHint: document.getElementById("tmdb-hint"),
     exportBtn: document.getElementById("export-btn"),
     importBtn: document.getElementById("import-btn"),
     importFile: document.getElementById("import-file"),
+    collectionBackdrop: document.getElementById("collection-backdrop"),
+    collectionModalTitle: document.getElementById("collection-modal-title"),
+    collectionList: document.getElementById("collection-list"),
+    closeCollectionModal: document.getElementById("close-collection-modal"),
   };
 
   function timeAgo(ts) {
@@ -261,6 +266,126 @@
     return parts.join(" · ");
   }
 
+  function collectionKey(t) {
+    return (t.collection || "").trim().toLowerCase();
+  }
+
+  // Groups an already-filtered/sorted list into single titles and
+  // collections (2+ titles sharing a non-empty `collection` field).
+  // A group is placed at the position of its first-seen member, so it
+  // naturally inherits that member's rank under the active sort.
+  function groupForDisplay(sortedList) {
+    const renderItems = [];
+    const groupsByKey = new Map();
+    for (const t of sortedList) {
+      const key = collectionKey(t);
+      if (!key) {
+        renderItems.push({ kind: "single", title: t });
+        continue;
+      }
+      let group = groupsByKey.get(key);
+      if (!group) {
+        group = { kind: "group", key, collection: t.collection.trim(), items: [] };
+        groupsByKey.set(key, group);
+        renderItems.push(group);
+      }
+      group.items.push(t);
+    }
+    return renderItems.map((item) =>
+      item.kind === "group" && item.items.length < 2 ? { kind: "single", title: item.items[0] } : item
+    );
+  }
+
+  const STATUS_PRIORITY = ["WATCHING", "ON_HOLD", "PLAN_TO_WATCH", "DROPPED"];
+
+  function aggregateStatus(items) {
+    if (items.every((i) => i.status === "COMPLETED")) return "COMPLETED";
+    for (const s of STATUS_PRIORITY) {
+      if (items.some((i) => i.status === s)) return s;
+    }
+    return items[0].status;
+  }
+
+  function posterMarkup(posterUrl, name) {
+    return posterUrl
+      ? `<img src="${escapeHtml(posterUrl)}" alt="${escapeHtml(name || "")}" loading="lazy" />`
+      : `<div class="poster-placeholder"><svg viewBox="0 0 24 24" width="32" height="32"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M4 15l4-4 4 4 4-6 4 4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>`;
+  }
+
+  function renderSingleCard(t) {
+    const icon = STATUS_ICONS[t.status];
+    const poster = posterMarkup(t.posterUrl, t.name);
+    const watchLink = t.watchUrl
+      ? `<a class="watch-link" href="${escapeHtml(t.watchUrl)}" target="_blank" rel="noopener noreferrer" title="Watch now" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M14 4h6v6M20 4l-9 9M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></a>`
+      : "";
+    const tag0 = (t.tags && t.tags[0]) || (t.type === "MOVIE" ? "Movie" : "Series");
+    const metaLine = scoreMetaLine(t);
+
+    const canQuickProgress = t.status !== "COMPLETED" && t.status !== "DROPPED";
+    let quickBtn = "";
+    if (canQuickProgress && t.type === "SERIES") {
+      quickBtn = `<button type="button" class="quick-progress" data-quick-episode="${t.id}" title="+1 episode"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>`;
+    } else if (canQuickProgress && t.type === "MOVIE") {
+      quickBtn = `<button type="button" class="quick-progress" data-quick-watched="${t.id}" title="Mark as watched"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
+    }
+
+    return `
+    <div class="card">
+      <div class="poster-btn" data-open="${t.id}" role="button" tabindex="0">
+        ${poster}
+        <span class="status-badge" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
+        ${watchLink}
+        ${quickBtn}
+        <span class="progress-overlay">
+          ${metaLine ? `<span class="progress-overlay-meta">${escapeHtml(metaLine)}</span>` : ""}
+          <span class="progress-overlay-main">${escapeHtml(progressLabel(t))}</span>
+        </span>
+      </div>
+      <button class="card-title-btn" data-open="${t.id}">
+        <div class="name">${escapeHtml(t.name)}</div>
+        <div class="card-meta"><span>${escapeHtml(tag0)}</span><span>${timeAgo(t.updatedAt)}</span></div>
+      </button>
+    </div>`;
+  }
+
+  function renderGroupCard(group) {
+    const chronological = [...group.items].sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+    const withPoster = chronological.find((i) => i.posterUrl) || chronological[0];
+    const poster = posterMarkup(withPoster.posterUrl, group.collection);
+    const icon = STATUS_ICONS[aggregateStatus(group.items)];
+
+    const years = group.items.map((i) => i.year).filter(Boolean);
+    let yearLabel = "";
+    if (years.length) {
+      const min = Math.min(...years);
+      const max = Math.max(...years);
+      yearLabel = min === max ? String(min) : `${min}–${max}`;
+    }
+    const latestUpdated = Math.max(...group.items.map((i) => i.updatedAt));
+
+    return `
+    <div class="card">
+      <div class="poster-stack-wrap">
+        <div class="poster-ghost poster-ghost-2"></div>
+        <div class="poster-ghost poster-ghost-1"></div>
+        <div class="poster-btn" data-group="${escapeHtml(group.key)}" role="button" tabindex="0">
+          ${poster}
+          <span class="status-badge" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
+          <span class="parts-badge">${group.items.length} parts</span>
+          ${
+            yearLabel
+              ? `<span class="progress-overlay"><span class="progress-overlay-meta">${escapeHtml(yearLabel)}</span></span>`
+              : ""
+          }
+        </div>
+      </div>
+      <button class="card-title-btn" data-group="${escapeHtml(group.key)}">
+        <div class="name">${escapeHtml(group.collection)}</div>
+        <div class="card-meta"><span>${group.items.length} titles</span><span>${timeAgo(latestUpdated)}</span></div>
+      </button>
+    </div>`;
+  }
+
   function renderGrid() {
     const list = visibleTitles();
     els.empty.hidden = list.length !== 0;
@@ -269,44 +394,10 @@
         ? "Your library is empty. Add the first title you're watching."
         : "No titles match these filters.";
 
-    els.grid.innerHTML = list
-      .map((t) => {
-        const icon = STATUS_ICONS[t.status];
-        const poster = t.posterUrl
-          ? `<img src="${escapeHtml(t.posterUrl)}" alt="${escapeHtml(t.name)}" loading="lazy" />`
-          : `<div class="poster-placeholder"><svg viewBox="0 0 24 24" width="32" height="32"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M4 15l4-4 4 4 4-6 4 4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>`;
-        const watchLink = t.watchUrl
-          ? `<a class="watch-link" href="${escapeHtml(t.watchUrl)}" target="_blank" rel="noopener noreferrer" title="Watch now" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M14 4h6v6M20 4l-9 9M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></a>`
-          : "";
-        const tag0 = (t.tags && t.tags[0]) || (t.type === "MOVIE" ? "Movie" : "Series");
-        const metaLine = scoreMetaLine(t);
+    const renderItems = groupForDisplay(list);
 
-        const canQuickProgress = t.status !== "COMPLETED" && t.status !== "DROPPED";
-        let quickBtn = "";
-        if (canQuickProgress && t.type === "SERIES") {
-          quickBtn = `<button type="button" class="quick-progress" data-quick-episode="${t.id}" title="+1 episode"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>`;
-        } else if (canQuickProgress && t.type === "MOVIE") {
-          quickBtn = `<button type="button" class="quick-progress" data-quick-watched="${t.id}" title="Mark as watched"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
-        }
-
-        return `
-        <div class="card">
-          <div class="poster-btn" data-open="${t.id}" role="button" tabindex="0">
-            ${poster}
-            <span class="status-badge" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
-            ${watchLink}
-            ${quickBtn}
-            <span class="progress-overlay">
-              ${metaLine ? `<span class="progress-overlay-meta">${escapeHtml(metaLine)}</span>` : ""}
-              <span class="progress-overlay-main">${escapeHtml(progressLabel(t))}</span>
-            </span>
-          </div>
-          <button class="card-title-btn" data-open="${t.id}">
-            <div class="name">${escapeHtml(t.name)}</div>
-            <div class="card-meta"><span>${escapeHtml(tag0)}</span><span>${timeAgo(t.updatedAt)}</span></div>
-          </button>
-        </div>`;
-      })
+    els.grid.innerHTML = renderItems
+      .map((item) => (item.kind === "group" ? renderGroupCard(item) : renderSingleCard(item.title)))
       .join("");
 
     els.grid.querySelectorAll("[data-open]").forEach((el) => {
@@ -315,6 +406,15 @@
         if (e.target === el && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           openModal(el.dataset.open);
+        }
+      });
+    });
+    els.grid.querySelectorAll("[data-group]").forEach((el) => {
+      el.addEventListener("click", () => openCollectionModal(el.dataset.group));
+      el.addEventListener("keydown", (e) => {
+        if (e.target === el && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          openCollectionModal(el.dataset.group);
         }
       });
     });
@@ -330,6 +430,44 @@
         quickMarkWatched(btn.dataset.quickWatched);
       });
     });
+  }
+
+  function openCollectionModal(key) {
+    const items = titles.filter((t) => collectionKey(t) === key);
+    if (items.length === 0) return;
+    const sorted = [...items].sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+
+    els.collectionModalTitle.textContent = items[0].collection.trim();
+    els.collectionList.innerHTML = sorted
+      .map((t) => {
+        const icon = STATUS_ICONS[t.status];
+        const poster = t.posterUrl
+          ? `<img src="${escapeHtml(t.posterUrl)}" alt="" />`
+          : `<span class="collection-row-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
+        return `
+        <button type="button" class="collection-row" data-open-part="${t.id}">
+          <span class="collection-row-poster">${poster}</span>
+          <span class="collection-row-info">
+            <span class="collection-row-name">${escapeHtml(t.name)}${t.year ? ` (${t.year})` : ""}</span>
+            <span class="collection-row-meta">${escapeHtml(progressLabel(t))}</span>
+          </span>
+          <span class="collection-row-status" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
+        </button>`;
+      })
+      .join("");
+
+    els.collectionList.querySelectorAll("[data-open-part]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        closeCollectionModal();
+        openModal(btn.dataset.openPart);
+      });
+    });
+
+    els.collectionBackdrop.hidden = false;
+  }
+
+  function closeCollectionModal() {
+    els.collectionBackdrop.hidden = true;
   }
 
   function quickAdvanceEpisode(id) {
@@ -443,6 +581,7 @@
     const dateStr = isMovie ? result.release_date : result.first_air_date;
     els.fYear.value = dateStr ? dateStr.slice(0, 4) : "";
     els.fTmdbScore.value = result.vote_average ? Number(result.vote_average.toFixed(1)) : "";
+    els.fCollection.value = "";
 
     hideTmdbResults();
 
@@ -453,6 +592,15 @@
         if (details.number_of_episodes) document.getElementById("f-total-episodes").value = details.number_of_episodes;
       } catch {
         // Season/episode totals are a nice-to-have; ignore failures silently.
+      }
+    } else {
+      try {
+        const details = await tmdbFetch(`/movie/${result.id}?language=en-US`);
+        if (details.belongs_to_collection?.name) {
+          els.fCollection.value = details.belongs_to_collection.name.replace(/\s+Collection$/i, "");
+        }
+      } catch {
+        // No formal TMDB collection found; leave it for manual entry.
       }
     }
   }
@@ -481,6 +629,7 @@
     els.fYear.value = t?.year ?? "";
     els.fMyScore.value = t?.myScore ?? "";
     els.fTmdbScore.value = t?.tmdbScore ?? "";
+    els.fCollection.value = t?.collection || "";
 
     toggleSeasonFields();
     els.backdrop.hidden = false;
@@ -523,6 +672,7 @@
       year: yearVal ? Number(yearVal) : null,
       myScore: myScoreVal ? Number(myScoreVal) : null,
       tmdbScore: tmdbScoreVal ? Number(tmdbScoreVal) : null,
+      collection: els.fCollection.value.trim(),
     };
 
     const now = Date.now();
@@ -601,6 +751,10 @@
   els.closeModal.addEventListener("click", closeModal);
   els.backdrop.addEventListener("click", (e) => {
     if (e.target === els.backdrop) closeModal();
+  });
+  els.closeCollectionModal.addEventListener("click", closeCollectionModal);
+  els.collectionBackdrop.addEventListener("click", (e) => {
+    if (e.target === els.collectionBackdrop) closeCollectionModal();
   });
   els.form.addEventListener("submit", handleSubmit);
   els.deleteBtn.addEventListener("click", handleDelete);

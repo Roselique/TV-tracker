@@ -118,6 +118,11 @@
         <input type="text" id="f-tags" placeholder="Fantasy, Romance, Game" />
       </div>
 
+      <div class="field">
+        <label>Collection / franchise (optional)</label>
+        <input type="text" id="f-collection" placeholder="e.g. Avatar — groups related titles together" />
+      </div>
+
       <div class="field-row field-row-4" id="season-fields">
         <div class="field">
           <label>Season</label>
@@ -150,6 +155,18 @@
         <button type="submit" class="btn btn-primary" id="submit-title">Add title</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="collection-backdrop" hidden>
+  <div class="modal" id="collection-modal">
+    <div class="modal-header">
+      <h2 id="collection-modal-title">Collection</h2>
+      <button class="icon-btn" id="close-collection-modal">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="collection-list" id="collection-list"></div>
   </div>
 </div>
 

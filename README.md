@@ -39,6 +39,12 @@ configuration is needed.
   restore it later. Since everything lives in this browser's local storage
   only (see below), export a backup occasionally so a cleared cache or a
   new device doesn't mean losing your list.
+- **Collections** — tag related titles (e.g. a trilogy, or a show and its
+  spin-offs) with the same Collection name and they're grouped into one
+  stacked card instead of cluttering the grid; click it to see and open
+  each part. Auto-filled from TMDB for movie franchises that have an
+  official collection; everything else (most TV franchises, like a show
+  and its sequel series) you tag by hand.
 
 ## Adding a title
 
