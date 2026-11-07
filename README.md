@@ -48,6 +48,14 @@ configuration is needed.
   TMDB for movie franchises that have an official collection; everything
   else (most TV franchises, like a show and its sequel series) you tag by
   hand.
+- **Franchises** — when several collections (or standalone movies) belong
+  to one bigger universe — e.g. Iron Man, Avengers, and Captain America
+  all being Marvel — tag them all with the same Franchise name. A
+  "Marvel" filter chip appears that shows every related stack and single
+  side by side, and its **Reorder** button opens a drag-to-order panel
+  across all of them (stacks included) to set your own watch order —
+  handy since release order and in-universe order often aren't the same.
+  Sort by "Watch order" to see your whole library in that sequence.
 
 ## Adding a title
 

@@ -112,6 +112,7 @@
   let state = {
     status: "ALL",
     tag: null,
+    franchise: null,
     query: "",
     sort: "updated",
     modalTitleId: null,
@@ -141,6 +142,7 @@
     fMyScore: document.getElementById("f-my-score"),
     fTmdbScore: document.getElementById("f-tmdb-score"),
     fCollection: document.getElementById("f-collection"),
+    fFranchise: document.getElementById("f-franchise"),
     tmdbResults: document.getElementById("tmdb-results"),
     tmdbHint: document.getElementById("tmdb-hint"),
     exportBtn: document.getElementById("export-btn"),
@@ -151,6 +153,12 @@
     collectionModalSubtitle: document.getElementById("collection-modal-subtitle"),
     collectionList: document.getElementById("collection-list"),
     closeCollectionModal: document.getElementById("close-collection-modal"),
+    franchiseChips: document.getElementById("franchise-chips"),
+    franchiseBackdrop: document.getElementById("franchise-backdrop"),
+    franchiseModalTitle: document.getElementById("franchise-modal-title"),
+    franchiseModalSubtitle: document.getElementById("franchise-modal-subtitle"),
+    franchiseList: document.getElementById("franchise-list"),
+    closeFranchiseModal: document.getElementById("close-franchise-modal"),
   };
 
   function timeAgo(ts) {
@@ -179,6 +187,15 @@
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
 
+  function allFranchises() {
+    const set = new Set();
+    titles.forEach((t) => {
+      const f = (t.franchise || "").trim();
+      if (f) set.add(f);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
   function counts() {
     const c = { ALL: titles.length };
     STATUS_ORDER.forEach((s) => (c[s] = 0));
@@ -190,6 +207,7 @@
     let list = titles.slice();
     if (state.status !== "ALL") list = list.filter((t) => t.status === state.status);
     if (state.tag) list = list.filter((t) => (t.tags || []).includes(state.tag));
+    if (state.franchise) list = list.filter((t) => (t.franchise || "").trim() === state.franchise);
     if (state.query.trim()) {
       const q = state.query.trim().toLowerCase();
       list = list.filter((t) => t.name.toLowerCase().includes(q));
@@ -199,6 +217,7 @@
     else if (state.sort === "tmdb_score")
       list.sort((a, b) => (b.tmdbScore ?? -1) - (a.tmdbScore ?? -1));
     else if (state.sort === "my_score") list.sort((a, b) => (b.myScore ?? -1) - (a.myScore ?? -1));
+    else if (state.sort === "watch_order") list = orderItemsBy(list, "watchOrder");
     else list.sort((a, b) => a.name.localeCompare(b.name));
     return list;
   }
@@ -251,6 +270,38 @@
     });
   }
 
+  function renderFranchiseChips() {
+    const franchises = allFranchises();
+    if (franchises.length === 0) {
+      els.franchiseChips.innerHTML = "";
+      return;
+    }
+    const chips = [{ key: null, label: "All franchises" }].concat(
+      franchises.map((f) => ({ key: f, label: f }))
+    );
+    let html = chips
+      .map(
+        (c) =>
+          `<button class="chip chip-tag ${state.franchise === c.key ? "active" : ""}" data-franchise="${escapeHtml(c.key ?? "")}">${escapeHtml(c.label)}</button>`
+      )
+      .join("");
+    if (state.franchise) {
+      html += `<button type="button" class="chip" id="franchise-reorder-btn" title="Set your watch order for this franchise">⇅ Reorder</button>`;
+    }
+    els.franchiseChips.innerHTML = html;
+    els.franchiseChips.querySelectorAll("[data-franchise]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const f = btn.dataset.franchise || null;
+        state.franchise = state.franchise === f ? null : f;
+        render();
+      });
+    });
+    const reorderBtn = document.getElementById("franchise-reorder-btn");
+    if (reorderBtn) {
+      reorderBtn.addEventListener("click", () => openFranchiseModal(state.franchise));
+    }
+  }
+
   function progressLabel(t) {
     if (t.type === "SERIES") {
       const total = t.totalEpisodes ? ` / ${t.totalEpisodes}` : "";
@@ -271,18 +322,26 @@
     return (t.collection || "").trim().toLowerCase();
   }
 
-  // Orders a collection's titles for display: explicit manual order
-  // (set by dragging in the collection panel) first, falling back to
-  // release year for anything not yet manually placed.
-  function collectionSortItems(items) {
+  // Orders items by an explicit manual-order field first (set by
+  // dragging in a reorder panel), falling back to release year for
+  // anything not yet manually placed.
+  function orderItemsBy(items, field) {
     return [...items].sort((a, b) => {
-      const ao = a.collectionOrder;
-      const bo = b.collectionOrder;
+      const ao = a[field];
+      const bo = b[field];
       if (ao != null && bo != null) return ao - bo;
       if (ao != null) return -1;
       if (bo != null) return 1;
       return (a.year ?? 9999) - (b.year ?? 9999);
     });
+  }
+
+  function collectionSortItems(items) {
+    return orderItemsBy(items, "collectionOrder");
+  }
+
+  function franchiseSortItems(items) {
+    return orderItemsBy(items, "watchOrder");
   }
 
   // Groups an already-filtered/sorted list into single titles and
@@ -536,6 +595,124 @@
     els.collectionBackdrop.hidden = true;
   }
 
+  let franchiseDragSrcKey = null;
+
+  function renderItemKey(item) {
+    return item.kind === "single" ? `single:${item.title.id}` : `group:${item.key}`;
+  }
+
+  function franchiseRowMarkup(item) {
+    if (item.kind === "single") {
+      const t = item.title;
+      const icon = STATUS_ICONS[t.status];
+      const poster = t.posterUrl
+        ? `<img src="${escapeHtml(t.posterUrl)}" alt="" />`
+        : `<span class="collection-row-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
+      return `
+      <div class="collection-row" draggable="true" data-row-key="${escapeHtml(renderItemKey(item))}" role="button" tabindex="0">
+        <span class="collection-row-handle" title="Drag to reorder"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="9" cy="6" r="1.4" fill="currentColor"/><circle cx="9" cy="12" r="1.4" fill="currentColor"/><circle cx="9" cy="18" r="1.4" fill="currentColor"/><circle cx="15" cy="6" r="1.4" fill="currentColor"/><circle cx="15" cy="12" r="1.4" fill="currentColor"/><circle cx="15" cy="18" r="1.4" fill="currentColor"/></svg></span>
+        <span class="collection-row-poster">${poster}</span>
+        <span class="collection-row-info">
+          <span class="collection-row-name">${escapeHtml(t.name)}${t.year ? ` (${t.year})` : ""}</span>
+          <span class="collection-row-meta">${escapeHtml(progressLabel(t))}</span>
+        </span>
+        <span class="collection-row-status" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
+      </div>`;
+    }
+
+    const ordered = collectionSortItems(item.items);
+    const withPoster = ordered.find((i) => i.posterUrl) || ordered[0];
+    const poster = withPoster.posterUrl
+      ? `<img src="${escapeHtml(withPoster.posterUrl)}" alt="" />`
+      : `<span class="collection-row-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
+    const icon = STATUS_ICONS[aggregateStatus(item.items)];
+    const completedCount = item.items.filter((i) => i.status === "COMPLETED").length;
+    return `
+    <div class="collection-row" draggable="true" data-row-key="${escapeHtml(renderItemKey(item))}" role="button" tabindex="0">
+      <span class="collection-row-handle" title="Drag to reorder"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="9" cy="6" r="1.4" fill="currentColor"/><circle cx="9" cy="12" r="1.4" fill="currentColor"/><circle cx="9" cy="18" r="1.4" fill="currentColor"/><circle cx="15" cy="6" r="1.4" fill="currentColor"/><circle cx="15" cy="12" r="1.4" fill="currentColor"/><circle cx="15" cy="18" r="1.4" fill="currentColor"/></svg></span>
+      <span class="collection-row-poster">${poster}</span>
+      <span class="collection-row-info">
+        <span class="collection-row-name">${escapeHtml(item.collection)}</span>
+        <span class="collection-row-meta">${item.items.length} parts · ${completedCount} done</span>
+      </span>
+      <span class="collection-row-status" style="background:${icon.color}"><svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg></span>
+    </div>`;
+  }
+
+  function openFranchiseModal(franchiseName) {
+    const items = titles.filter((t) => (t.franchise || "").trim() === franchiseName);
+    if (items.length === 0) return;
+
+    const renderItems = groupForDisplay(franchiseSortItems(items));
+
+    els.franchiseModalTitle.textContent = franchiseName;
+    els.franchiseModalSubtitle.textContent = `${items.length} title${items.length === 1 ? "" : "s"}`;
+    els.franchiseList.innerHTML = renderItems.map(franchiseRowMarkup).join("");
+
+    els.franchiseList.querySelectorAll(".collection-row").forEach((row) => {
+      const key = row.dataset.rowKey;
+      const [kind, id] = key.split(/:(.+)/);
+      const openTarget = () => {
+        closeFranchiseModal();
+        if (kind === "single") openModal(id);
+        else openCollectionModal(id);
+      };
+      row.addEventListener("click", openTarget);
+      row.addEventListener("keydown", (e) => {
+        if (e.target === row && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          openTarget();
+        }
+      });
+      row.addEventListener("dragstart", (e) => {
+        franchiseDragSrcKey = key;
+        e.dataTransfer.effectAllowed = "move";
+        row.classList.add("dragging");
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        els.franchiseList.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+      });
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (key !== franchiseDragSrcKey) row.classList.add("drag-over");
+      });
+      row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        row.classList.remove("drag-over");
+        if (!franchiseDragSrcKey || franchiseDragSrcKey === key) return;
+        reorderFranchiseItems(franchiseName, franchiseDragSrcKey, key);
+      });
+    });
+
+    els.franchiseBackdrop.hidden = false;
+  }
+
+  function reorderFranchiseItems(franchiseName, srcKey, targetKey) {
+    const items = titles.filter((t) => (t.franchise || "").trim() === franchiseName);
+    const renderItems = groupForDisplay(franchiseSortItems(items));
+    const fromIdx = renderItems.findIndex((item) => renderItemKey(item) === srcKey);
+    const toIdx = renderItems.findIndex((item) => renderItemKey(item) === targetKey);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = renderItems.splice(fromIdx, 1);
+    renderItems.splice(toIdx, 0, moved);
+    renderItems.forEach((item, i) => {
+      if (item.kind === "single") item.title.watchOrder = i;
+      else item.items.forEach((t) => (t.watchOrder = i));
+    });
+    saveTitles(titles);
+    state.sort = "watch_order";
+    els.sort.value = "watch_order";
+    openFranchiseModal(franchiseName);
+    renderGrid();
+  }
+
+  function closeFranchiseModal() {
+    els.franchiseBackdrop.hidden = true;
+  }
+
   function quickAdvanceEpisode(id) {
     const t = titles.find((x) => x.id === id);
     if (!t) return;
@@ -559,6 +736,7 @@
     renderStats();
     renderStatusTabs();
     renderTagChips();
+    renderFranchiseChips();
     renderGrid();
   }
 
@@ -696,6 +874,7 @@
     els.fMyScore.value = t?.myScore ?? "";
     els.fTmdbScore.value = t?.tmdbScore ?? "";
     els.fCollection.value = t?.collection || "";
+    els.fFranchise.value = t?.franchise || "";
 
     toggleSeasonFields();
     els.backdrop.hidden = false;
@@ -739,6 +918,7 @@
       myScore: myScoreVal ? Number(myScoreVal) : null,
       tmdbScore: tmdbScoreVal ? Number(tmdbScoreVal) : null,
       collection: els.fCollection.value.trim(),
+      franchise: els.fFranchise.value.trim(),
     };
 
     const now = Date.now();
@@ -821,6 +1001,10 @@
   els.closeCollectionModal.addEventListener("click", closeCollectionModal);
   els.collectionBackdrop.addEventListener("click", (e) => {
     if (e.target === els.collectionBackdrop) closeCollectionModal();
+  });
+  els.closeFranchiseModal.addEventListener("click", closeFranchiseModal);
+  els.franchiseBackdrop.addEventListener("click", (e) => {
+    if (e.target === els.franchiseBackdrop) closeFranchiseModal();
   });
   els.form.addEventListener("submit", handleSubmit);
   els.deleteBtn.addEventListener("click", handleDelete);
