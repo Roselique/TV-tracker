@@ -127,6 +127,7 @@
     statusTabs: document.getElementById("status-tabs"),
     tagChips: document.getElementById("tag-chips"),
     search: document.getElementById("search"),
+    searchClear: document.getElementById("search-clear"),
     sort: document.getElementById("sort"),
     openAdd: document.getElementById("open-add"),
     backdrop: document.getElementById("modal-backdrop"),
@@ -1018,6 +1019,14 @@
   });
   els.search.addEventListener("input", (e) => {
     state.query = e.target.value;
+    els.searchClear.hidden = !e.target.value;
+    renderGrid();
+  });
+  els.searchClear.addEventListener("click", () => {
+    els.search.value = "";
+    state.query = "";
+    els.searchClear.hidden = true;
+    els.search.focus();
     renderGrid();
   });
   els.sort.addEventListener("change", (e) => {

@@ -110,7 +110,7 @@ body {
   flex: 1;
   min-width: 200px;
 }
-.search-box svg {
+.search-box > svg {
   position: absolute;
   left: 12px;
   top: 50%;
@@ -120,8 +120,27 @@ body {
 }
 .search-box input {
   width: 100%;
-  padding: 9px 12px 9px 34px;
+  padding: 9px 34px 9px 34px;
 }
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.search-clear:hover { background: var(--surface-raised); color: var(--foreground); }
+.search-clear[hidden] { display: none; }
 select, input, textarea {
   background: var(--surface);
   border: 1px solid var(--border);
