@@ -1054,12 +1054,49 @@
   let heroIndex = 0;
   let heroPaused = false;
 
+  // Checks one tracked series' own TMDB page for an episode airing today,
+  // rather than relying on TMDB's global "airing today" list (which only
+  // covers a small slice of all TV and rarely includes what you actually watch).
+  async function checkSeriesAiringToday(t) {
+    try {
+      const details = await tmdbFetch(`/tv/${t.tmdbId}?language=en-US`);
+      const today = todayKey();
+      const episode =
+        (details.next_episode_to_air && details.next_episode_to_air.air_date === today && details.next_episode_to_air) ||
+        (details.last_episode_to_air && details.last_episode_to_air.air_date === today && details.last_episode_to_air);
+      if (!episode) return null;
+      return {
+        id: details.id,
+        name: details.name,
+        media_type: "tv",
+        poster_path: details.poster_path,
+        backdrop_path: details.backdrop_path,
+        first_air_date: details.first_air_date,
+        vote_average: details.vote_average,
+        overview: details.overview,
+        genre_ids: (details.genres || []).map((g) => g.id),
+        _episodeInfo: { season: episode.season_number, episode: episode.episode_number },
+        _localTitleId: t.id,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function fetchAiringTodayForLibrary() {
+    const tracked = titles.filter(
+      (t) => t.type === "SERIES" && t.tmdbId && t.tmdbMediaType === "tv" && t.status !== "DROPPED"
+    );
+    const checked = await Promise.all(tracked.map(checkSeriesAiringToday));
+    return checked.filter(Boolean);
+  }
+
   async function fetchDiscoverData() {
     const [all, trendMovie, trendTv, airing, popMovies, topTv] = await Promise.all([
       tmdbFetch("/trending/all/day?language=en-US"),
       tmdbFetch("/trending/movie/day?language=en-US"),
       tmdbFetch("/trending/tv/day?language=en-US"),
-      tmdbFetch("/tv/airing_today?language=en-US"),
+      fetchAiringTodayForLibrary(),
       tmdbFetch("/movie/popular?language=en-US"),
       tmdbFetch("/tv/top_rated?language=en-US"),
     ]);
@@ -1070,7 +1107,7 @@
         .slice(0, 6),
       trendingMovie: (trendMovie.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 10),
       trendingTv: (trendTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 10),
-      airingToday: (airing.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 14),
+      airingToday: airing,
       popularMovies: (popMovies.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 14),
       topRatedTv: (topTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 14),
     };
@@ -1167,13 +1204,18 @@
       : `<div class="poster-placeholder"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>`;
     const score = r.vote_average ? `<span class="discover-card-score">★ ${Math.round(r.vote_average * 10)}%</span>` : "";
     const rank = opts.rank ? `<span class="discover-card-rank">${opts.rank}</span>` : "";
+    const episodeBadge = r._episodeInfo
+      ? `<span class="discover-card-episode">S${r._episodeInfo.season} · E${r._episodeInfo.episode}</span>`
+      : "";
+    const clickable = r._localTitleId ? ` data-open-library="${r._localTitleId}" role="button" tabindex="0"` : "";
     return `
     <div class="discover-card${opts.useBackdrop ? " discover-card-wide" : ""}">
-      <div class="discover-card-poster">
+      <div class="discover-card-poster"${clickable}>
         ${img}
         ${score}
         ${discoverAddButtonMarkup(r)}
         ${rank}
+        ${episodeBadge}
       </div>
       <div class="discover-card-title">${escapeHtml(title)}</div>
       <div class="discover-card-meta">${typeLabel}${year ? ` · ${year}` : ""}</div>
@@ -1193,13 +1235,27 @@
   function renderCarouselRow(containerId, items, opts = {}) {
     const el = document.getElementById(containerId);
     if (!el) return;
+    if (items.length === 0) {
+      el.innerHTML = `<p class="carousel-empty">${escapeHtml(opts.emptyMessage || "Nothing to show right now.")}</p>`;
+      return;
+    }
     el.innerHTML = items.map((r, i) => discoverCardMarkup(r, { ...opts, rank: opts.ranked ? i + 1 : null })).join("");
     el.querySelectorAll("[data-quick-add]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
         const [mediaType, idStr] = btn.dataset.quickAdd.split(":");
         const id = Number(idStr);
         const result = items.find((r) => r.id === id && r.media_type === mediaType);
         if (result) quickAddFromDiscover(result);
+      });
+    });
+    el.querySelectorAll("[data-open-library]").forEach((poster) => {
+      poster.addEventListener("click", () => openModal(poster.dataset.openLibrary));
+      poster.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openModal(poster.dataset.openLibrary);
+        }
       });
     });
     updateCarouselArrows(el);
@@ -1244,7 +1300,10 @@
 
     const trendingItems = discoverTrendingTab === "movie" ? discoverData.trendingMovie : discoverData.trendingTv;
     renderCarouselRow("discover-trending-row", trendingItems, { ranked: true });
-    renderCarouselRow("discover-airing-row", discoverData.airingToday, { useBackdrop: true });
+    renderCarouselRow("discover-airing-row", discoverData.airingToday, {
+      useBackdrop: true,
+      emptyMessage: "No new episodes today for the series you're tracking.",
+    });
     renderCarouselRow("discover-popular-row", discoverData.popularMovies);
     renderCarouselRow("discover-top-rated-row", discoverData.topRatedTv);
 
