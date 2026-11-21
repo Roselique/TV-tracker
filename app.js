@@ -1054,16 +1054,39 @@
   let heroIndex = 0;
   let heroPaused = false;
 
+  // Runs `fn` over `items` with at most `limit` requests in flight at
+  // once, instead of firing them all in one Promise.all — a library with
+  // many tracked series could otherwise burst well past TMDB's per-second
+  // rate limit and have most requests silently fail.
+  async function mapWithConcurrency(items, limit, fn) {
+    const results = new Array(items.length);
+    let next = 0;
+    async function worker() {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await fn(items[i]);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
+  }
+
   // Looks up one tracked series' own TMDB page for its most recently
   // aired episode, rather than relying on TMDB's global "airing today"
   // list (which only covers a small slice of all TV and rarely includes
   // what you actually watch).
   async function fetchLatestEpisodeForSeries(t) {
+    let details;
     try {
-      const details = await tmdbFetch(`/tv/${t.tmdbId}?language=en-US`);
-      const episode = details.last_episode_to_air || details.next_episode_to_air;
-      if (!episode || !episode.air_date) return null;
-      return {
+      details = await tmdbFetch(`/tv/${t.tmdbId}?language=en-US`);
+    } catch {
+      return { ok: false, reason: "fetch-error" };
+    }
+    const episode = details.last_episode_to_air || details.next_episode_to_air;
+    if (!episode || !episode.air_date) return { ok: false, reason: "no-episode" };
+    return {
+      ok: true,
+      data: {
         id: details.id,
         name: details.name,
         media_type: "tv",
@@ -1076,20 +1099,39 @@
         _episodeInfo: { season: episode.season_number, episode: episode.episode_number },
         _episodeAirDate: episode.air_date,
         _localTitleId: t.id,
-      };
-    } catch {
-      return null;
-    }
+      },
+    };
   }
 
   async function fetchLatestEpisodesForLibrary() {
     const tracked = titles.filter(
       (t) => t.type === "SERIES" && t.tmdbId && t.tmdbMediaType === "tv" && t.status !== "DROPPED"
     );
-    const checked = await Promise.all(tracked.map(fetchLatestEpisodeForSeries));
-    return checked
-      .filter(Boolean)
+    if (tracked.length === 0) {
+      return {
+        items: [],
+        emptyReason:
+          "None of your tracked series are linked to TMDB yet — add them via search, or use the Match TMDB button.",
+      };
+    }
+    const checked = await mapWithConcurrency(tracked, 6, fetchLatestEpisodeForSeries);
+    const items = checked
+      .filter((c) => c.ok)
+      .map((c) => c.data)
       .sort((a, b) => new Date(b._episodeAirDate) - new Date(a._episodeAirDate));
+
+    let emptyReason = null;
+    if (items.length === 0) {
+      const fetchErrors = checked.filter((c) => !c.ok && c.reason === "fetch-error").length;
+      if (fetchErrors === tracked.length) {
+        emptyReason = `Checked ${tracked.length} tracked series but couldn't reach TMDB for any of them — try Refresh in a bit.`;
+      } else if (fetchErrors > 0) {
+        emptyReason = `Checked ${tracked.length} tracked series (${fetchErrors} couldn't be reached) — none had episode info on TMDB.`;
+      } else {
+        emptyReason = `Checked ${tracked.length} tracked series — none had episode info on TMDB yet.`;
+      }
+    }
+    return { items, emptyReason };
   }
 
   async function fetchDiscoverData() {
@@ -1108,7 +1150,8 @@
         .slice(0, 6),
       trendingMovie: (trendMovie.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 10),
       trendingTv: (trendTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 10),
-      latestEpisodes: airing.slice(0, 14),
+      latestEpisodes: airing.items.slice(0, 14),
+      latestEpisodesEmptyReason: airing.emptyReason,
       popularMovies: (popMovies.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 14),
       topRatedTv: (topTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 14),
     };
@@ -1306,7 +1349,9 @@
     renderCarouselRow("discover-airing-row", discoverData.latestEpisodes, {
       useBackdrop: true,
       useAiredMeta: true,
-      emptyMessage: "No recent episode info found for the series you're tracking.",
+      emptyMessage:
+        discoverData.latestEpisodesEmptyReason ||
+        "No recent episode info found for the series you're tracking.",
     });
     renderCarouselRow("discover-popular-row", discoverData.popularMovies);
     renderCarouselRow("discover-top-rated-row", discoverData.topRatedTv);
