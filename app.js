@@ -1054,17 +1054,15 @@
   let heroIndex = 0;
   let heroPaused = false;
 
-  // Checks one tracked series' own TMDB page for an episode airing today,
-  // rather than relying on TMDB's global "airing today" list (which only
-  // covers a small slice of all TV and rarely includes what you actually watch).
-  async function checkSeriesAiringToday(t) {
+  // Looks up one tracked series' own TMDB page for its most recently
+  // aired episode, rather than relying on TMDB's global "airing today"
+  // list (which only covers a small slice of all TV and rarely includes
+  // what you actually watch).
+  async function fetchLatestEpisodeForSeries(t) {
     try {
       const details = await tmdbFetch(`/tv/${t.tmdbId}?language=en-US`);
-      const today = todayKey();
-      const episode =
-        (details.next_episode_to_air && details.next_episode_to_air.air_date === today && details.next_episode_to_air) ||
-        (details.last_episode_to_air && details.last_episode_to_air.air_date === today && details.last_episode_to_air);
-      if (!episode) return null;
+      const episode = details.last_episode_to_air || details.next_episode_to_air;
+      if (!episode || !episode.air_date) return null;
       return {
         id: details.id,
         name: details.name,
@@ -1076,6 +1074,7 @@
         overview: details.overview,
         genre_ids: (details.genres || []).map((g) => g.id),
         _episodeInfo: { season: episode.season_number, episode: episode.episode_number },
+        _episodeAirDate: episode.air_date,
         _localTitleId: t.id,
       };
     } catch {
@@ -1083,12 +1082,14 @@
     }
   }
 
-  async function fetchAiringTodayForLibrary() {
+  async function fetchLatestEpisodesForLibrary() {
     const tracked = titles.filter(
       (t) => t.type === "SERIES" && t.tmdbId && t.tmdbMediaType === "tv" && t.status !== "DROPPED"
     );
-    const checked = await Promise.all(tracked.map(checkSeriesAiringToday));
-    return checked.filter(Boolean);
+    const checked = await Promise.all(tracked.map(fetchLatestEpisodeForSeries));
+    return checked
+      .filter(Boolean)
+      .sort((a, b) => new Date(b._episodeAirDate) - new Date(a._episodeAirDate));
   }
 
   async function fetchDiscoverData() {
@@ -1096,7 +1097,7 @@
       tmdbFetch("/trending/all/day?language=en-US"),
       tmdbFetch("/trending/movie/day?language=en-US"),
       tmdbFetch("/trending/tv/day?language=en-US"),
-      fetchAiringTodayForLibrary(),
+      fetchLatestEpisodesForLibrary(),
       tmdbFetch("/movie/popular?language=en-US"),
       tmdbFetch("/tv/top_rated?language=en-US"),
     ]);
@@ -1107,7 +1108,7 @@
         .slice(0, 6),
       trendingMovie: (trendMovie.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 10),
       trendingTv: (trendTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 10),
-      airingToday: airing,
+      latestEpisodes: airing.slice(0, 14),
       popularMovies: (popMovies.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 14),
       topRatedTv: (topTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 14),
     };
@@ -1218,7 +1219,9 @@
         ${episodeBadge}
       </div>
       <div class="discover-card-title">${escapeHtml(title)}</div>
-      <div class="discover-card-meta">${typeLabel}${year ? ` · ${year}` : ""}</div>
+      <div class="discover-card-meta">${typeLabel} · ${
+        opts.useAiredMeta && r._episodeAirDate ? timeAgo(new Date(r._episodeAirDate).getTime()) : year
+      }</div>
     </div>`;
   }
 
@@ -1293,16 +1296,17 @@
 
     els.discoverCarousels.innerHTML = [
       carouselBlockMarkup("discover-trending-row", "Trending Today", { toggle: true }),
-      carouselBlockMarkup("discover-airing-row", "New Episodes Today"),
+      carouselBlockMarkup("discover-airing-row", "Latest Episodes"),
       carouselBlockMarkup("discover-popular-row", "Popular Movies"),
       carouselBlockMarkup("discover-top-rated-row", "Top Rated Series"),
     ].join("");
 
     const trendingItems = discoverTrendingTab === "movie" ? discoverData.trendingMovie : discoverData.trendingTv;
     renderCarouselRow("discover-trending-row", trendingItems, { ranked: true });
-    renderCarouselRow("discover-airing-row", discoverData.airingToday, {
+    renderCarouselRow("discover-airing-row", discoverData.latestEpisodes, {
       useBackdrop: true,
-      emptyMessage: "No new episodes today for the series you're tracking.",
+      useAiredMeta: true,
+      emptyMessage: "No recent episode info found for the series you're tracking.",
     });
     renderCarouselRow("discover-popular-row", discoverData.popularMovies);
     renderCarouselRow("discover-top-rated-row", discoverData.topRatedTv);

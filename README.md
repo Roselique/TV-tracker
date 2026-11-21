@@ -32,11 +32,12 @@ to Watch" on the hero) to add it straight to your library with its
 poster, year, and score filled in; already-added titles show a checkmark
 instead.
 
-**New Episodes Today** is different from the rest: instead of showing
-whatever TMDB says is airing somewhere today, it only checks the series
-you're already tracking (skipping dropped ones) and shows the ones with
-an episode today, along with which one (e.g. "S2 · E6"). Click a card
-there to jump straight into updating that title's progress.
+**Latest Episodes** is different from the rest: instead of showing
+whatever TMDB says is airing somewhere today, it checks the series
+you're already tracking (skipping dropped ones) for their most recently
+aired episode and lists them newest-first, with which one (e.g.
+"S2 · E6") and how long ago it aired. Click a card there to jump
+straight into updating that title's progress.
 
 It refreshes once per day automatically and caches that day's results
 locally so reopening the page doesn't refetch; the **Refresh** button
