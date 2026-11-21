@@ -22,6 +22,21 @@ GitHub Pages site), push this repo and enable Pages on it — it's pure
 static files (`index.html`, `style.css`, `app.js`), so no build
 configuration is needed.
 
+## Discover
+
+Above your library sits a Discover section, pulled live from TMDB: a
+rotating hero banner of what's trending, a Trending Today top-10 (with a
+Movies/Series toggle), New Episodes Today, Popular Movies, and Top Rated
+Series — each a horizontally scrollable row. Click the **+** on any card
+(or "Add to Plan to Watch" on the hero) to add it straight to your library
+with its poster, year, and score filled in; already-added titles show a
+checkmark instead.
+
+It refreshes once per day automatically and caches that day's results
+locally so reopening the page doesn't refetch; the **Refresh** button
+forces a new fetch anytime. If TMDB can't be reached, this section just
+says so and your tracked library underneath is completely unaffected.
+
 ## Features
 
 - Poster grid library with a status badge (plan to watch / watching / on

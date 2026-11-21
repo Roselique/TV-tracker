@@ -26,6 +26,9 @@
   const TMDB_API = "https://api.themoviedb.org/3";
   const TMDB_POSTER_LIST = "https://image.tmdb.org/t/p/w92";
   const TMDB_POSTER_FULL = "https://image.tmdb.org/t/p/w500";
+  const TMDB_BACKDROP = "https://image.tmdb.org/t/p/w1280";
+  const DISCOVER_CACHE_KEY = "tv-tracker-discover-cache";
+  const HERO_ROTATE_MS = 6000;
 
   const TMDB_MOVIE_GENRES = {
     28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
@@ -168,6 +171,10 @@
     tmdbMatchSubtitle: document.getElementById("tmdb-match-subtitle"),
     tmdbMatchCandidates: document.getElementById("tmdb-match-candidates"),
     closeTmdbMatchModal: document.getElementById("close-tmdb-match-modal"),
+    discoverStatus: document.getElementById("discover-status"),
+    discoverRefreshBtn: document.getElementById("discover-refresh-btn"),
+    discoverHero: document.getElementById("discover-hero"),
+    discoverCarousels: document.getElementById("discover-carousels"),
     tmdbMatchSkip: document.getElementById("tmdb-match-skip"),
   };
 
@@ -1035,6 +1042,285 @@
     reportTmdbMatchSummary();
   }
 
+  // ---------- Discover ----------
+
+  function todayKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  let discoverData = null;
+  let discoverTrendingTab = "movie";
+  let heroTimer = null;
+  let heroIndex = 0;
+  let heroPaused = false;
+
+  async function fetchDiscoverData() {
+    const [all, trendMovie, trendTv, airing, popMovies, topTv] = await Promise.all([
+      tmdbFetch("/trending/all/day?language=en-US"),
+      tmdbFetch("/trending/movie/day?language=en-US"),
+      tmdbFetch("/trending/tv/day?language=en-US"),
+      tmdbFetch("/tv/airing_today?language=en-US"),
+      tmdbFetch("/movie/popular?language=en-US"),
+      tmdbFetch("/tv/top_rated?language=en-US"),
+    ]);
+    return {
+      date: todayKey(),
+      hero: (all.results || [])
+        .filter((r) => (r.media_type === "movie" || r.media_type === "tv") && r.backdrop_path)
+        .slice(0, 6),
+      trendingMovie: (trendMovie.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 10),
+      trendingTv: (trendTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 10),
+      airingToday: (airing.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 14),
+      popularMovies: (popMovies.results || []).map((r) => ({ ...r, media_type: "movie" })).slice(0, 14),
+      topRatedTv: (topTv.results || []).map((r) => ({ ...r, media_type: "tv" })).slice(0, 14),
+    };
+  }
+
+  async function loadDiscoverData(forceRefresh) {
+    if (!forceRefresh) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(DISCOVER_CACHE_KEY) || "null");
+        if (cached && cached.date === todayKey()) {
+          discoverData = cached;
+          els.discoverStatus.textContent = "Trending today, updated automatically.";
+          renderDiscoverSections();
+          return;
+        }
+      } catch {
+        // A corrupt cache just means we refetch below.
+      }
+    }
+    els.discoverStatus.textContent = "Loading what's trending…";
+    els.discoverRefreshBtn.disabled = true;
+    try {
+      discoverData = await fetchDiscoverData();
+      localStorage.setItem(DISCOVER_CACHE_KEY, JSON.stringify(discoverData));
+      els.discoverStatus.textContent = "Trending today, updated automatically.";
+    } catch {
+      discoverData = null;
+      els.discoverStatus.textContent = "Couldn't reach TMDB right now — try Refresh in a bit.";
+    }
+    els.discoverRefreshBtn.disabled = false;
+    renderDiscoverSections();
+  }
+
+  function discoverAddButtonMarkup(r) {
+    if (isAlreadyAdded(r)) {
+      return `<span class="discover-add-btn added" title="Already in your library"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+    }
+    return `<button type="button" class="discover-add-btn" data-quick-add="${r.media_type}:${r.id}" title="Add to Plan to Watch"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>`;
+  }
+
+  function discoverHeroAddButtonMarkup(r) {
+    if (isAlreadyAdded(r)) {
+      return `<span class="btn btn-ghost" style="cursor:default;"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> In your library</span>`;
+    }
+    return `<button type="button" class="btn btn-primary" data-hero-add="1"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> Add to Plan to Watch</button>`;
+  }
+
+  function quickAddFromDiscover(result) {
+    if (isAlreadyAdded(result)) return;
+    const isMovie = result.media_type === "movie";
+    const now = Date.now();
+    const t = {
+      id: uid(),
+      name: isMovie ? result.title : result.name,
+      type: isMovie ? "MOVIE" : "SERIES",
+      status: "PLAN_TO_WATCH",
+      posterUrl: "",
+      watchUrl: "",
+      tags: [],
+      currentSeason: 1,
+      currentEpisode: 0,
+      totalSeasons: null,
+      totalEpisodes: null,
+      notes: "",
+      year: null,
+      myScore: null,
+      tmdbScore: null,
+      collection: "",
+      franchise: "",
+      tmdbId: null,
+      tmdbMediaType: null,
+      collectionOrder: null,
+      watchOrder: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    applyTmdbMatchToTitle(t, result);
+    titles.unshift(t);
+    saveTitles(titles);
+    render();
+    renderDiscoverSections();
+  }
+
+  function discoverCardMarkup(r, opts = {}) {
+    const isMovie = r.media_type === "movie";
+    const title = isMovie ? r.title : r.name;
+    const date = isMovie ? r.release_date : r.first_air_date;
+    const year = date ? date.slice(0, 4) : "";
+    const typeLabel = isMovie ? "Movie" : "Series";
+    const imgPath = opts.useBackdrop ? r.backdrop_path : r.poster_path;
+    const imgBase = opts.useBackdrop ? TMDB_BACKDROP : TMDB_POSTER_FULL;
+    const img = imgPath
+      ? `<img src="${imgBase}${imgPath}" alt="${escapeHtml(title)}" loading="lazy" />`
+      : `<div class="poster-placeholder"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>`;
+    const score = r.vote_average ? `<span class="discover-card-score">★ ${Math.round(r.vote_average * 10)}%</span>` : "";
+    const rank = opts.rank ? `<span class="discover-card-rank">${opts.rank}</span>` : "";
+    return `
+    <div class="discover-card${opts.useBackdrop ? " discover-card-wide" : ""}">
+      <div class="discover-card-poster">
+        ${img}
+        ${score}
+        ${discoverAddButtonMarkup(r)}
+        ${rank}
+      </div>
+      <div class="discover-card-title">${escapeHtml(title)}</div>
+      <div class="discover-card-meta">${typeLabel}${year ? ` · ${year}` : ""}</div>
+    </div>`;
+  }
+
+  function renderCarouselRow(containerId, items, opts = {}) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = items.map((r, i) => discoverCardMarkup(r, { ...opts, rank: opts.ranked ? i + 1 : null })).join("");
+    el.querySelectorAll("[data-quick-add]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const [mediaType, idStr] = btn.dataset.quickAdd.split(":");
+        const id = Number(idStr);
+        const result = items.find((r) => r.id === id && r.media_type === mediaType);
+        if (result) quickAddFromDiscover(result);
+      });
+    });
+  }
+
+  function carouselBlockMarkup(id, heading, options = {}) {
+    const toggleHtml = options.toggle
+      ? `<div class="carousel-toggle">
+           <button type="button" class="chip ${discoverTrendingTab === "movie" ? "active" : ""}" data-trend-tab="movie">Movies</button>
+           <button type="button" class="chip ${discoverTrendingTab === "tv" ? "active" : ""}" data-trend-tab="tv">Series</button>
+         </div>`
+      : "";
+    return `
+    <div class="carousel-block">
+      <div class="carousel-header">
+        <h3>${escapeHtml(heading)}</h3>
+        ${toggleHtml}
+      </div>
+      <div class="carousel-row-wrap">
+        <button type="button" class="carousel-arrow carousel-arrow-left" data-scroll-target="${id}" data-dir="-1">‹</button>
+        <div class="carousel-row" id="${id}"></div>
+        <button type="button" class="carousel-arrow carousel-arrow-right" data-scroll-target="${id}" data-dir="1">›</button>
+      </div>
+    </div>`;
+  }
+
+  function renderDiscoverSections() {
+    renderDiscoverHero();
+
+    if (!discoverData) {
+      els.discoverCarousels.innerHTML = "";
+      return;
+    }
+
+    els.discoverCarousels.innerHTML = [
+      carouselBlockMarkup("discover-trending-row", "Trending Today", { toggle: true }),
+      carouselBlockMarkup("discover-airing-row", "New Episodes Today"),
+      carouselBlockMarkup("discover-popular-row", "Popular Movies"),
+      carouselBlockMarkup("discover-top-rated-row", "Top Rated Series"),
+    ].join("");
+
+    const trendingItems = discoverTrendingTab === "movie" ? discoverData.trendingMovie : discoverData.trendingTv;
+    renderCarouselRow("discover-trending-row", trendingItems, { ranked: true });
+    renderCarouselRow("discover-airing-row", discoverData.airingToday, { useBackdrop: true });
+    renderCarouselRow("discover-popular-row", discoverData.popularMovies);
+    renderCarouselRow("discover-top-rated-row", discoverData.topRatedTv);
+
+    els.discoverCarousels.querySelectorAll("[data-trend-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        discoverTrendingTab = btn.dataset.trendTab;
+        renderDiscoverSections();
+      });
+    });
+    els.discoverCarousels.querySelectorAll("[data-scroll-target]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const row = document.getElementById(btn.dataset.scrollTarget);
+        if (row) row.scrollBy({ left: Number(btn.dataset.dir) * 420, behavior: "smooth" });
+      });
+    });
+  }
+
+  function renderDiscoverHero() {
+    if (!discoverData || !discoverData.hero || discoverData.hero.length === 0) {
+      els.discoverHero.hidden = true;
+      stopHeroRotation();
+      return;
+    }
+    els.discoverHero.hidden = false;
+    if (heroIndex >= discoverData.hero.length) heroIndex = 0;
+
+    const slides = discoverData.hero
+      .map((r, i) => {
+        const isMovie = r.media_type === "movie";
+        const title = isMovie ? r.title : r.name;
+        const date = isMovie ? r.release_date : r.first_air_date;
+        const year = date ? date.slice(0, 4) : "";
+        const typeLabel = isMovie ? "Movie" : "Series";
+        const score = r.vote_average ? Math.round(r.vote_average * 10) : null;
+        return `
+        <div class="discover-hero-slide${i === heroIndex ? " active" : ""}" style="background-image:url('${TMDB_BACKDROP}${r.backdrop_path}')">
+          <div class="discover-hero-content">
+            <div class="discover-hero-kicker">Trending Today</div>
+            <h3 class="discover-hero-title">${escapeHtml(title)}</h3>
+            <div class="discover-hero-meta">
+              ${score ? `<span class="discover-hero-score">${score}%</span>` : ""}
+              ${year ? `<span>${year}</span>` : ""}
+              <span>${typeLabel}</span>
+            </div>
+            <p class="discover-hero-overview">${escapeHtml(r.overview || "")}</p>
+            <div class="discover-hero-actions">${discoverHeroAddButtonMarkup(r)}</div>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    const dots = `<div class="discover-hero-dots">${discoverData.hero
+      .map((_, i) => `<button type="button" class="discover-hero-dot${i === heroIndex ? " active" : ""}" data-hero-dot="${i}"></button>`)
+      .join("")}</div>`;
+
+    els.discoverHero.innerHTML = slides + dots;
+
+    els.discoverHero.querySelectorAll("[data-hero-dot]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        heroIndex = Number(btn.dataset.heroDot);
+        renderDiscoverHero();
+      });
+    });
+    const addBtn = els.discoverHero.querySelector("[data-hero-add]");
+    if (addBtn) {
+      addBtn.addEventListener("click", () => {
+        quickAddFromDiscover(discoverData.hero[heroIndex]);
+        renderDiscoverHero();
+      });
+    }
+
+    startHeroRotation();
+  }
+
+  function startHeroRotation() {
+    stopHeroRotation();
+    heroTimer = setInterval(() => {
+      if (heroPaused || !discoverData || !discoverData.hero.length) return;
+      heroIndex = (heroIndex + 1) % discoverData.hero.length;
+      renderDiscoverHero();
+    }, HERO_ROTATE_MS);
+  }
+
+  function stopHeroRotation() {
+    if (heroTimer) clearInterval(heroTimer);
+    heroTimer = null;
+  }
+
   function openModal(id) {
     state.modalTitleId = id || null;
     state.isAdding = !id;
@@ -1235,6 +1521,14 @@
     if (file) importData(file);
     e.target.value = "";
   });
+  els.discoverRefreshBtn.addEventListener("click", () => loadDiscoverData(true));
+  els.discoverHero.addEventListener("mouseenter", () => {
+    heroPaused = true;
+  });
+  els.discoverHero.addEventListener("mouseleave", () => {
+    heroPaused = false;
+  });
 
   render();
+  loadDiscoverData(false);
 })();
