@@ -167,6 +167,7 @@ body {
   background: linear-gradient(to left, var(--background) 30%, transparent);
 }
 .carousel-arrow-left { left: 0; }
+.carousel-arrow[hidden] { display: none; }
 
 .discover-card {
   position: relative;

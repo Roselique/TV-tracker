@@ -1180,6 +1180,16 @@
     </div>`;
   }
 
+  function updateCarouselArrows(row) {
+    const wrap = row.closest(".carousel-row-wrap");
+    if (!wrap) return;
+    const left = wrap.querySelector(".carousel-arrow-left");
+    const right = wrap.querySelector(".carousel-arrow-right");
+    const maxScroll = row.scrollWidth - row.clientWidth;
+    if (left) left.hidden = row.scrollLeft <= 2;
+    if (right) right.hidden = maxScroll <= 2 || row.scrollLeft >= maxScroll - 2;
+  }
+
   function renderCarouselRow(containerId, items, opts = {}) {
     const el = document.getElementById(containerId);
     if (!el) return;
@@ -1192,6 +1202,8 @@
         if (result) quickAddFromDiscover(result);
       });
     });
+    updateCarouselArrows(el);
+    el.addEventListener("scroll", () => updateCarouselArrows(el));
   }
 
   function carouselBlockMarkup(id, heading, options = {}) {
@@ -1522,6 +1534,9 @@
     e.target.value = "";
   });
   els.discoverRefreshBtn.addEventListener("click", () => loadDiscoverData(true));
+  window.addEventListener("resize", () => {
+    document.querySelectorAll(".carousel-row").forEach((row) => updateCarouselArrows(row));
+  });
   els.discoverHero.addEventListener("mouseenter", () => {
     heroPaused = true;
   });
