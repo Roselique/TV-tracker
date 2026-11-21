@@ -162,6 +162,13 @@
     franchiseModalSubtitle: document.getElementById("franchise-modal-subtitle"),
     franchiseList: document.getElementById("franchise-list"),
     closeFranchiseModal: document.getElementById("close-franchise-modal"),
+    matchTmdbBtn: document.getElementById("match-tmdb-btn"),
+    matchTmdbLabel: document.getElementById("match-tmdb-label"),
+    tmdbMatchBackdrop: document.getElementById("tmdb-match-backdrop"),
+    tmdbMatchSubtitle: document.getElementById("tmdb-match-subtitle"),
+    tmdbMatchCandidates: document.getElementById("tmdb-match-candidates"),
+    closeTmdbMatchModal: document.getElementById("close-tmdb-match-modal"),
+    tmdbMatchSkip: document.getElementById("tmdb-match-skip"),
   };
 
   function timeAgo(ts) {
@@ -862,6 +869,172 @@
     }
   }
 
+  async function tmdbSearchForTitle(t) {
+    const isMovie = t.type === "MOVIE";
+    const endpoint = isMovie ? "/search/movie" : "/search/tv";
+    const data = await tmdbFetch(`${endpoint}?query=${encodeURIComponent(t.name)}&language=en-US&page=1`);
+    return (data.results || []).map((r) => ({ ...r, media_type: isMovie ? "movie" : "tv" }));
+  }
+
+  // Decides how to resolve a title against its TMDB search results:
+  // - "auto": exactly one title-text match (or, among several, exactly
+  //   one also matches a year we already know) — safe to link silently.
+  // - "fuzzy": no exact text match, but results exist — best guess is
+  //   the top result, still applied automatically.
+  // - "ambiguous": two or more results share the exact same title text
+  //   and a known year didn't narrow it down — needs a human pick.
+  // - "none": nothing came back at all.
+  function pickTmdbMatch(t, results) {
+    if (results.length === 0) return { outcome: "none" };
+    const normalize = (s) => (s || "").trim().toLowerCase();
+    const targetName = normalize(t.name);
+    const exact = results.filter((r) => normalize(r.title || r.name) === targetName);
+
+    if (exact.length === 0) return { outcome: "fuzzy", match: results[0] };
+    if (exact.length === 1) return { outcome: "auto", match: exact[0] };
+
+    if (t.year) {
+      const byYear = exact.filter((r) => {
+        const dateStr = r.release_date || r.first_air_date;
+        return dateStr && Number(dateStr.slice(0, 4)) === t.year;
+      });
+      if (byYear.length === 1) return { outcome: "auto", match: byYear[0] };
+    }
+    return { outcome: "ambiguous", candidates: exact };
+  }
+
+  function applyTmdbMatchToTitle(t, result) {
+    const isMovie = result.media_type === "movie";
+    t.tmdbId = result.id;
+    t.tmdbMediaType = isMovie ? "movie" : "tv";
+    if (!t.posterUrl && result.poster_path) t.posterUrl = `${TMDB_POSTER_FULL}${result.poster_path}`;
+    const dateStr = isMovie ? result.release_date : result.first_air_date;
+    if (!t.year && dateStr) t.year = Number(dateStr.slice(0, 4));
+    if (result.vote_average) t.tmdbScore = Number(result.vote_average.toFixed(1));
+    if ((!t.tags || t.tags.length === 0) && result.genre_ids && result.genre_ids.length) {
+      const genreMap = isMovie ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES;
+      const names = result.genre_ids.map((id) => genreMap[id]).filter(Boolean);
+      if (names.length) t.tags = names;
+    }
+  }
+
+  let tmdbMatchQueue = [];
+  let tmdbMatchSummary = { auto: 0, fuzzy: 0, none: 0, manual: 0, skipped: 0 };
+
+  async function runTmdbMatchBatch() {
+    const candidates = titles.filter((t) => !t.tmdbId);
+    if (candidates.length === 0) {
+      alert("Every title already has a TMDB match.");
+      return;
+    }
+
+    els.matchTmdbBtn.disabled = true;
+    tmdbMatchQueue = [];
+    tmdbMatchSummary = { auto: 0, fuzzy: 0, none: 0, manual: 0, skipped: 0 };
+
+    for (let i = 0; i < candidates.length; i++) {
+      const t = candidates[i];
+      els.matchTmdbLabel.textContent = `Matching ${i + 1}/${candidates.length}…`;
+      try {
+        const results = await tmdbSearchForTitle(t);
+        const decision = pickTmdbMatch(t, results);
+        if (decision.outcome === "auto") {
+          applyTmdbMatchToTitle(t, decision.match);
+          tmdbMatchSummary.auto++;
+        } else if (decision.outcome === "fuzzy") {
+          applyTmdbMatchToTitle(t, decision.match);
+          tmdbMatchSummary.fuzzy++;
+        } else if (decision.outcome === "ambiguous") {
+          tmdbMatchQueue.push({ title: t, candidates: decision.candidates });
+        } else {
+          tmdbMatchSummary.none++;
+        }
+      } catch {
+        tmdbMatchSummary.none++;
+      }
+    }
+
+    saveTitles(titles);
+    render();
+    els.matchTmdbBtn.disabled = false;
+    els.matchTmdbLabel.textContent = "Match TMDB";
+
+    if (tmdbMatchQueue.length > 0) {
+      showNextTmdbMatchAmbiguity();
+    } else {
+      reportTmdbMatchSummary();
+    }
+  }
+
+  function reportTmdbMatchSummary() {
+    const s = tmdbMatchSummary;
+    const lines = [];
+    if (s.auto) lines.push(`${s.auto} linked automatically`);
+    if (s.fuzzy) lines.push(`${s.fuzzy} linked (best guess — no exact title match)`);
+    if (s.manual) lines.push(`${s.manual} resolved by you`);
+    if (s.skipped) lines.push(`${s.skipped} skipped`);
+    if (s.none) lines.push(`${s.none} had no match on TMDB`);
+    alert(lines.length ? `TMDB matching done:\n${lines.join("\n")}` : "Nothing to match.");
+  }
+
+  function showNextTmdbMatchAmbiguity() {
+    if (tmdbMatchQueue.length === 0) {
+      els.tmdbMatchBackdrop.hidden = true;
+      saveTitles(titles);
+      render();
+      reportTmdbMatchSummary();
+      return;
+    }
+    const { title: t, candidates } = tmdbMatchQueue[0];
+    els.tmdbMatchSubtitle.textContent = `${candidates.length} titles on TMDB are named "${t.name}" — which one is yours?`;
+    els.tmdbMatchCandidates.innerHTML = candidates
+      .map((r, i) => {
+        const isMovie = r.media_type === "movie";
+        const date = isMovie ? r.release_date : r.first_air_date;
+        const year = date ? date.slice(0, 4) : "—";
+        const typeLabel = isMovie ? "Movie" : "Series";
+        const poster = r.poster_path
+          ? `<img class="tmdb-result-poster" src="${TMDB_POSTER_LIST}${r.poster_path}" alt="" />`
+          : `<span class="tmdb-result-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
+        return `
+        <button type="button" class="tmdb-result" data-candidate="${i}">
+          ${poster}
+          <span class="tmdb-result-info">
+            <span class="tmdb-result-title">${escapeHtml(typeLabel)} · ${escapeHtml(year)}</span>
+            <span class="tmdb-result-meta">${escapeHtml((r.overview || "").slice(0, 80))}${r.overview && r.overview.length > 80 ? "…" : ""}</span>
+          </span>
+        </button>`;
+      })
+      .join("");
+    els.tmdbMatchCandidates.querySelectorAll("[data-candidate]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        applyTmdbMatchToTitle(t, candidates[Number(btn.dataset.candidate)]);
+        tmdbMatchSummary.manual++;
+        tmdbMatchQueue.shift();
+        showNextTmdbMatchAmbiguity();
+      });
+    });
+    els.tmdbMatchBackdrop.hidden = false;
+  }
+
+  function skipCurrentTmdbMatch() {
+    if (tmdbMatchQueue.length === 0) return;
+    tmdbMatchQueue.shift();
+    tmdbMatchSummary.skipped++;
+    showNextTmdbMatchAmbiguity();
+  }
+
+  function closeTmdbMatchModal() {
+    // Treat the rest of the queue as skipped rather than leaving it
+    // silently unresolved.
+    tmdbMatchSummary.skipped += tmdbMatchQueue.length;
+    tmdbMatchQueue = [];
+    els.tmdbMatchBackdrop.hidden = true;
+    saveTitles(titles);
+    render();
+    reportTmdbMatchSummary();
+  }
+
   function openModal(id) {
     state.modalTitleId = id || null;
     state.isAdding = !id;
@@ -1022,6 +1195,12 @@
   els.closeFranchiseModal.addEventListener("click", closeFranchiseModal);
   els.franchiseBackdrop.addEventListener("click", (e) => {
     if (e.target === els.franchiseBackdrop) closeFranchiseModal();
+  });
+  els.matchTmdbBtn.addEventListener("click", runTmdbMatchBatch);
+  els.tmdbMatchSkip.addEventListener("click", skipCurrentTmdbMatch);
+  els.closeTmdbMatchModal.addEventListener("click", closeTmdbMatchModal);
+  els.tmdbMatchBackdrop.addEventListener("click", (e) => {
+    if (e.target === els.tmdbMatchBackdrop) closeTmdbMatchModal();
   });
   els.form.addEventListener("submit", handleSubmit);
   els.deleteBtn.addEventListener("click", handleDelete);

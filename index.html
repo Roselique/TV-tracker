@@ -25,6 +25,10 @@
         Import
       </button>
       <input type="file" id="import-file" accept="application/json" hidden />
+      <button class="btn btn-ghost" id="match-tmdb-btn" title="Link your existing titles to TMDB">
+        <svg viewBox="0 0 24 24" width="15" height="15"><path d="M9 15l6-6M10 7l1-1a3 3 0 1 1 4 4l-1 1M14 17l-1 1a3 3 0 1 1-4-4l1-1" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="match-tmdb-label">Match TMDB</span>
+      </button>
       <button class="btn btn-primary" id="open-add">
         <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
         Add title
@@ -200,6 +204,24 @@
     </div>
     <p class="collection-hint">Drag to set your watch order — click a title or stack to open it.</p>
     <div class="collection-list" id="franchise-list"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="tmdb-match-backdrop" hidden>
+  <div class="modal" id="tmdb-match-modal">
+    <div class="modal-header">
+      <div>
+        <h2>Which one is this?</h2>
+        <p class="muted" id="tmdb-match-subtitle"></p>
+      </div>
+      <button class="icon-btn" id="close-tmdb-match-modal">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="tmdb-results" id="tmdb-match-candidates" style="margin:0;border:none;border-radius:0;padding:12px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-link-danger" id="tmdb-match-skip">Skip this title</button>
+    </div>
   </div>
 </div>
 

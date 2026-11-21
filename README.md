@@ -35,6 +35,12 @@ configuration is needed.
 - Filter by status and by genre/tag; search; sort by recently updated/added,
   name, audience score, or your own rating
 - Add, edit, and delete titles from a single form
+- **Match TMDB** — a one-click button that links every existing title
+  without a TMDB connection (e.g. ones you added before this feature, or
+  typed in by hand) by searching for it and filling in whatever's missing
+  (poster, year, audience score, genres). It links automatically whenever
+  the match is clear, and only stops to ask when two or more TMDB results
+  share the exact same title — everything else is resolved on its own.
 - **Export / Import** — download your whole library as a JSON file and
   restore it later. Since everything lives in this browser's local storage
   only (see below), export a backup occasionally so a cleared cache or a
