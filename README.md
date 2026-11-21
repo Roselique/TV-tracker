@@ -60,12 +60,13 @@ configuration is needed.
 ## Adding a title
 
 Click **Add title** and start typing the name — matching series and movies
-from [TMDB](https://www.themoviedb.org) show up in a dropdown, and picking
-one auto-fills the poster, type, genres, and (for series) total seasons and
-episodes. You can still edit any of that, or skip the search and fill
-everything in by hand. Add the where-to-watch link and your current
-season/episode, then save. Click any card afterwards to update your
-progress or status, or to delete it.
+from [TMDB](https://www.themoviedb.org) show up in a dropdown, with a green
+checkmark on any result you've already added, and picking one auto-fills
+the poster, type, genres, and (for series) total seasons and episodes. You
+can still edit any of that, or skip the search and fill everything in by
+hand. Add the where-to-watch link and your current season/episode, then
+save. Click any card afterwards to update your progress or status, or to
+delete it.
 
 ### About the TMDB API key
 

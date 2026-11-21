@@ -405,6 +405,17 @@ select:focus, input:focus, textarea:focus { border-color: var(--blue); }
   white-space: nowrap;
 }
 .tmdb-result-meta { font-size: 11px; color: var(--muted); }
+.tmdb-result-added {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #059669;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .tmdb-empty { padding: 8px; font-size: 13px; color: var(--muted); }
 .tmdb-results[hidden] { display: none; }
 .field label { font-size: 12px; font-weight: 500; color: var(--muted); }

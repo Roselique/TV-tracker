@@ -142,6 +142,8 @@
     fYear: document.getElementById("f-year"),
     fMyScore: document.getElementById("f-my-score"),
     fTmdbScore: document.getElementById("f-tmdb-score"),
+    fTmdbId: document.getElementById("f-tmdb-id"),
+    fTmdbMediaType: document.getElementById("f-tmdb-media-type"),
     fCollection: document.getElementById("f-collection"),
     fFranchise: document.getElementById("f-franchise"),
     tmdbResults: document.getElementById("tmdb-results"),
@@ -751,6 +753,10 @@
     els.tmdbHint.hidden = true;
   }
 
+  function isAlreadyAdded(result) {
+    return titles.some((t) => t.tmdbId === result.id && t.tmdbMediaType === result.media_type);
+  }
+
   function renderTmdbResults(results) {
     if (results.length === 0) {
       els.tmdbResults.innerHTML = '<p class="tmdb-empty">No matches found — you can still fill this in by hand.</p>';
@@ -766,6 +772,9 @@
         const poster = r.poster_path
           ? `<img class="tmdb-result-poster" src="${TMDB_POSTER_LIST}${r.poster_path}" alt="" />`
           : `<span class="tmdb-result-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
+        const addedBadge = isAlreadyAdded(r)
+          ? `<span class="tmdb-result-added" title="Already in your library"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
+          : "";
         return `
         <button type="button" class="tmdb-result" data-index="${i}">
           ${poster}
@@ -773,6 +782,7 @@
             <span class="tmdb-result-title">${escapeHtml(title)}</span>
             <span class="tmdb-result-meta">${typeLabel} · ${year}</span>
           </span>
+          ${addedBadge}
         </button>`;
       })
       .join("");
@@ -827,6 +837,8 @@
     els.fYear.value = dateStr ? dateStr.slice(0, 4) : "";
     els.fTmdbScore.value = result.vote_average ? Number(result.vote_average.toFixed(1)) : "";
     els.fCollection.value = "";
+    els.fTmdbId.value = result.id;
+    els.fTmdbMediaType.value = result.media_type;
 
     hideTmdbResults();
 
@@ -876,6 +888,8 @@
     els.fTmdbScore.value = t?.tmdbScore ?? "";
     els.fCollection.value = t?.collection || "";
     els.fFranchise.value = t?.franchise || "";
+    els.fTmdbId.value = t?.tmdbId ?? "";
+    els.fTmdbMediaType.value = t?.tmdbMediaType || "";
 
     toggleSeasonFields();
     els.backdrop.hidden = false;
@@ -920,6 +934,8 @@
       tmdbScore: tmdbScoreVal ? Number(tmdbScoreVal) : null,
       collection: els.fCollection.value.trim(),
       franchise: els.fFranchise.value.trim(),
+      tmdbId: els.fTmdbId.value ? Number(els.fTmdbId.value) : null,
+      tmdbMediaType: els.fTmdbMediaType.value || null,
     };
 
     const now = Date.now();
