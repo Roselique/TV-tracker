@@ -87,6 +87,29 @@
         <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
     </div>
+    <div class="title-view" id="title-view" hidden>
+      <div class="view-body">
+        <div class="view-poster-wrap">
+          <img id="view-poster" alt="" />
+          <div class="poster-placeholder" id="view-poster-placeholder"><svg viewBox="0 0 24 24" width="28" height="28"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>
+          <span class="status-badge" id="view-status-badge"></span>
+        </div>
+        <div class="view-info">
+          <div class="view-meta" id="view-meta"></div>
+          <div class="view-tags" id="view-tags"></div>
+          <p class="view-overview" id="view-overview"></p>
+          <p class="view-notes" id="view-notes" hidden></p>
+          <a class="btn btn-ghost view-watch-link" id="view-watch-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M14 4h6v6M20 4l-9 9M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Watch now
+          </a>
+        </div>
+      </div>
+      <button type="button" class="view-edit-btn" id="view-edit-btn" title="Edit details">
+        <span>Edit details</span>
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
     <form id="title-form">
       <div class="field tmdb-field">
         <label>Name *</label>
@@ -173,6 +196,11 @@
           <label>Episodes in this season</label>
           <input type="number" id="f-total-episodes" min="0" />
         </div>
+      </div>
+
+      <div class="field">
+        <label>Synopsis</label>
+        <textarea id="f-overview" rows="2" placeholder="What's it about? Filled in automatically from TMDB when available."></textarea>
       </div>
 
       <div class="field">

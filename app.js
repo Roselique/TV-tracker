@@ -138,6 +138,17 @@
     form: document.getElementById("title-form"),
     deleteBtn: document.getElementById("delete-title"),
     submitBtn: document.getElementById("submit-title"),
+    titleView: document.getElementById("title-view"),
+    viewPoster: document.getElementById("view-poster"),
+    viewPosterPlaceholder: document.getElementById("view-poster-placeholder"),
+    viewStatusBadge: document.getElementById("view-status-badge"),
+    viewMeta: document.getElementById("view-meta"),
+    viewTags: document.getElementById("view-tags"),
+    viewOverview: document.getElementById("view-overview"),
+    viewNotes: document.getElementById("view-notes"),
+    viewWatchLink: document.getElementById("view-watch-link"),
+    viewEditBtn: document.getElementById("view-edit-btn"),
+    fOverview: document.getElementById("f-overview"),
     closeModal: document.getElementById("close-modal"),
     seasonFields: document.getElementById("season-fields"),
     fType: document.getElementById("f-type"),
@@ -496,11 +507,11 @@
       .join("");
 
     els.grid.querySelectorAll("[data-open]").forEach((el) => {
-      el.addEventListener("click", () => openModal(el.dataset.open));
+      el.addEventListener("click", () => openTitleView(el.dataset.open));
       el.addEventListener("keydown", (e) => {
         if (e.target === el && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
-          openModal(el.dataset.open);
+          openTitleView(el.dataset.open);
         }
       });
     });
@@ -877,6 +888,7 @@
     els.fCollection.value = "";
     els.fTmdbId.value = result.id;
     els.fTmdbMediaType.value = result.media_type;
+    els.fOverview.value = result.overview || "";
 
     hideTmdbResults();
 
@@ -950,6 +962,7 @@
     const dateStr = isMovie ? result.release_date : result.first_air_date;
     if (!t.year && dateStr) t.year = Number(dateStr.slice(0, 4));
     if (result.vote_average) t.tmdbScore = Number(result.vote_average.toFixed(1));
+    if (!t.overview && result.overview) t.overview = result.overview;
     if ((!t.tags || t.tags.length === 0) && result.genre_ids && result.genre_ids.length) {
       const genreMap = isMovie ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES;
       const names = result.genre_ids.map((id) => genreMap[id]).filter(Boolean);
@@ -1473,14 +1486,75 @@
     heroTimer = null;
   }
 
+  function openTitleView(id) {
+    const t = titles.find((x) => x.id === id);
+    if (!t) return;
+    state.modalTitleId = id;
+    hideTmdbResults();
+
+    els.form.hidden = true;
+    els.deleteBtn.hidden = true;
+    els.submitBtn.hidden = true;
+    els.titleView.hidden = false;
+    els.modalTitle.textContent = t.name;
+
+    const icon = STATUS_ICONS[t.status];
+    if (t.posterUrl) {
+      els.viewPoster.src = t.posterUrl;
+      els.viewPoster.alt = t.name;
+      els.viewPoster.style.display = "";
+      els.viewPosterPlaceholder.style.display = "none";
+    } else {
+      els.viewPoster.style.display = "none";
+      els.viewPosterPlaceholder.style.display = "";
+    }
+    els.viewStatusBadge.style.background = icon.color;
+    els.viewStatusBadge.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg>`;
+
+    const metaParts = [];
+    if (t.year) metaParts.push(String(t.year));
+    metaParts.push(t.type === "MOVIE" ? "Movie" : "Series");
+    if (t.tmdbScore != null) metaParts.push(`★ ${Math.round(t.tmdbScore * 10)}%`);
+    if (t.myScore != null) metaParts.push(`♥ ${t.myScore}`);
+    metaParts.push(progressLabel(t));
+    els.viewMeta.textContent = metaParts.join(" · ");
+
+    els.viewTags.innerHTML = (t.tags || [])
+      .map((tag) => `<span class="chip-tag">${escapeHtml(tag)}</span>`)
+      .join("");
+
+    els.viewOverview.textContent =
+      t.overview || "No synopsis saved for this title yet — click Edit details to add one.";
+
+    if (t.notes) {
+      els.viewNotes.textContent = `Your notes: ${t.notes}`;
+      els.viewNotes.hidden = false;
+    } else {
+      els.viewNotes.hidden = true;
+    }
+
+    if (t.watchUrl) {
+      els.viewWatchLink.href = t.watchUrl;
+      els.viewWatchLink.hidden = false;
+    } else {
+      els.viewWatchLink.hidden = true;
+    }
+
+    els.backdrop.hidden = false;
+    maybeBackfillTitle(t);
+  }
+
   function openModal(id) {
     state.modalTitleId = id || null;
     state.isAdding = !id;
     const t = id ? titles.find((x) => x.id === id) : null;
     hideTmdbResults();
 
+    els.titleView.hidden = true;
+    els.form.hidden = false;
     els.modalTitle.textContent = t ? "Edit title" : "Add a title";
     els.submitBtn.textContent = t ? "Save changes" : "Add title";
+    els.submitBtn.hidden = false;
     els.deleteBtn.hidden = !t;
 
     document.getElementById("f-name").value = t?.name || "";
@@ -1502,31 +1576,74 @@
     els.fTmdbId.value = t?.tmdbId ?? "";
     els.fTmdbMediaType.value = t?.tmdbMediaType || "";
     els.fSeasonEpisodeCounts.value = JSON.stringify(t?.seasonEpisodeCounts || {});
+    els.fOverview.value = t?.overview || "";
 
     toggleSeasonFields();
     els.backdrop.hidden = false;
 
-    const hasSeasonCounts = t?.seasonEpisodeCounts && Object.keys(t.seasonEpisodeCounts).length > 0;
-    if (t && t.type === "SERIES" && t.tmdbId && t.tmdbMediaType === "tv" && !hasSeasonCounts) {
-      backfillSeasonEpisodeCounts(t);
+    maybeBackfillTitle(t);
+  }
+
+  // Decides whether a title needs a background TMDB fetch to fill in data
+  // it's missing — per-season episode counts for series, or a synopsis for
+  // either series or movies — for titles linked to TMDB before those
+  // features existed (or added without that data).
+  function maybeBackfillTitle(t) {
+    if (!t || !t.tmdbId) return;
+    if (t.type === "SERIES" && t.tmdbMediaType === "tv") {
+      const hasSeasonCounts = t.seasonEpisodeCounts && Object.keys(t.seasonEpisodeCounts).length > 0;
+      if (!hasSeasonCounts || !t.overview) backfillSeasonEpisodeCounts(t);
+    } else if (t.type === "MOVIE" && t.tmdbMediaType === "movie" && !t.overview) {
+      backfillMovieOverview(t);
     }
   }
 
-  // Fetches per-season episode counts in the background for a title that
-  // was linked to TMDB before this feature existed (or added without a
-  // season breakdown), so its "episodes in this season" total stops being
-  // the old series-wide cumulative number.
+  // Fetches per-season episode counts and/or a synopsis in the background
+  // for a series that was linked to TMDB before this feature existed (or
+  // added without a season breakdown), so its "episodes in this season"
+  // total stops being the old series-wide cumulative number.
   async function backfillSeasonEpisodeCounts(t) {
     try {
       const details = await tmdbFetch(`/tv/${t.tmdbId}?language=en-US`);
       const seasonCounts = buildSeasonEpisodeCounts(details);
-      if (Object.keys(seasonCounts).length === 0) return;
-      t.seasonEpisodeCounts = seasonCounts;
+      let changed = false;
+      if (Object.keys(seasonCounts).length > 0) {
+        t.seasonEpisodeCounts = seasonCounts;
+        changed = true;
+      }
+      if (!t.overview && details.overview) {
+        t.overview = details.overview;
+        changed = true;
+      }
+      if (!changed) return;
       saveTitles(titles);
-      if (state.modalTitleId !== t.id) return; // user moved on; data is saved, just don't touch the form
-      els.fSeasonEpisodeCounts.value = JSON.stringify(seasonCounts);
-      const seasonNum = Number(document.getElementById("f-season").value) || t.currentSeason || 1;
-      if (seasonCounts[seasonNum]) els.fTotalEpisodes.value = seasonCounts[seasonNum];
+      if (state.modalTitleId !== t.id) return; // user moved on; data is saved, just don't touch the UI
+
+      if (Object.keys(seasonCounts).length > 0 && !els.form.hidden) {
+        els.fSeasonEpisodeCounts.value = JSON.stringify(seasonCounts);
+        const seasonNum = Number(document.getElementById("f-season").value) || t.currentSeason || 1;
+        if (seasonCounts[seasonNum]) els.fTotalEpisodes.value = seasonCounts[seasonNum];
+      }
+      if (t.overview) {
+        if (!els.form.hidden) els.fOverview.value = t.overview;
+        if (!els.titleView.hidden) els.viewOverview.textContent = t.overview;
+      }
+    } catch {
+      // Leave it for manual entry.
+    }
+  }
+
+  // Fetches a movie's synopsis in the background when it's linked to TMDB
+  // but missing one (e.g. added before this feature existed).
+  async function backfillMovieOverview(t) {
+    try {
+      const details = await tmdbFetch(`/movie/${t.tmdbId}?language=en-US`);
+      if (!details.overview || t.overview) return;
+      t.overview = details.overview;
+      saveTitles(titles);
+      if (state.modalTitleId !== t.id) return;
+      if (!els.form.hidden) els.fOverview.value = t.overview;
+      if (!els.titleView.hidden) els.viewOverview.textContent = t.overview;
     } catch {
       // Leave it for manual entry.
     }
@@ -1580,6 +1697,7 @@
           return {};
         }
       })(),
+      overview: els.fOverview.value.trim(),
     };
 
     const now = Date.now();
@@ -1659,6 +1777,7 @@
   els.backdrop.addEventListener("click", (e) => {
     if (e.target === els.backdrop) closeModal();
   });
+  els.viewEditBtn.addEventListener("click", () => openModal(state.modalTitleId));
   els.closeCollectionModal.addEventListener("click", closeCollectionModal);
   els.collectionBackdrop.addEventListener("click", (e) => {
     if (e.target === els.collectionBackdrop) closeCollectionModal();

@@ -85,6 +85,24 @@ says so and your tracked library underneath is completely unaffected.
   handy since release order and in-universe order often aren't the same.
   Sort by "Watch order" to see your whole library in that sequence.
 
+## Viewing and editing a title
+
+Clicking a card in the library opens a quick-view panel first — poster,
+status, year, scores, genre tags, your progress, your notes, and a
+synopsis, plus a "watch now" link if you've set one. It's there so you can
+remind yourself what something's about without jumping into the edit form.
+Click **Edit details** (the arrow) to switch to the full form for that
+title. Opening a collection stack, a franchise entry, or a card from the
+Discover row's Latest Episodes still goes straight to the edit form, since
+those are usually opened to update progress rather than to read the
+synopsis.
+
+The synopsis is filled in automatically from TMDB — picking a search result
+while adding a title grabs it immediately, and existing titles that are
+linked to TMDB but missing one get it fetched quietly in the background the
+first time you open them. You can also write or edit it by hand in the
+Synopsis field.
+
 ## Adding a title
 
 Click **Add title** and start typing the name — matching series and movies
