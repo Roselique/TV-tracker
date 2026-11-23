@@ -90,11 +90,21 @@ says so and your tracked library underneath is completely unaffected.
 Click **Add title** and start typing the name — matching series and movies
 from [TMDB](https://www.themoviedb.org) show up in a dropdown, with a green
 checkmark on any result you've already added, and picking one auto-fills
-the poster, type, genres, and (for series) total seasons and episodes. You
-can still edit any of that, or skip the search and fill everything in by
-hand. Add the where-to-watch link and your current season/episode, then
-save. Click any card afterwards to update your progress or status, or to
-delete it.
+the poster, type, genres, and (for series) total seasons and "episodes in
+this season" — scoped to whichever season number you have selected, not
+the show's all-time episode count, so you can actually tell what episode
+you're on. Changing the Season field re-fills that count for the new
+season automatically, and the **+1 episode** button on the card rolls over
+into the next season once you pass the last one (when that data is
+available). You can still edit any of that, or skip the search and fill
+everything in by hand. Add the where-to-watch link and your current
+season/episode, then save. Click any card afterwards to update your
+progress or status, or to delete it.
+
+Titles added before this existed (or added without a season breakdown)
+show their old all-time total until you open them again — opening a
+series' edit view quietly fetches the real per-season counts from TMDB
+in the background and corrects it, no action needed.
 
 ### About the TMDB API key
 

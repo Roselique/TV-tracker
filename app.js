@@ -147,6 +147,9 @@
     fTmdbScore: document.getElementById("f-tmdb-score"),
     fTmdbId: document.getElementById("f-tmdb-id"),
     fTmdbMediaType: document.getElementById("f-tmdb-media-type"),
+    fSeasonEpisodeCounts: document.getElementById("f-season-episode-counts"),
+    fSeason: document.getElementById("f-season"),
+    fTotalEpisodes: document.getElementById("f-total-episodes"),
     fCollection: document.getElementById("f-collection"),
     fFranchise: document.getElementById("f-franchise"),
     tmdbResults: document.getElementById("tmdb-results"),
@@ -733,7 +736,18 @@
   function quickAdvanceEpisode(id) {
     const t = titles.find((x) => x.id === id);
     if (!t) return;
-    t.currentEpisode = (t.currentEpisode || 0) + 1;
+    const nextEpisode = (t.currentEpisode || 0) + 1;
+    const seasonCounts = t.seasonEpisodeCounts || {};
+    const nextSeasonCount = seasonCounts[t.currentSeason + 1];
+    if (t.totalEpisodes && nextEpisode > t.totalEpisodes && nextSeasonCount) {
+      // Known season boundary and a next season exists on TMDB — roll over
+      // instead of counting into episode numbers that belong to it.
+      t.currentSeason += 1;
+      t.currentEpisode = 1;
+      t.totalEpisodes = nextSeasonCount;
+    } else {
+      t.currentEpisode = nextEpisode;
+    }
     if (t.status === "PLAN_TO_WATCH" || t.status === "ON_HOLD") t.status = "WATCHING";
     t.updatedAt = Date.now();
     saveTitles(titles);
@@ -831,6 +845,16 @@
     }
   }
 
+  // Maps season number -> episode count for that season, from a TMDB
+  // /tv/{id} details response, skipping season 0 ("Specials").
+  function buildSeasonEpisodeCounts(details) {
+    const seasonCounts = {};
+    (details.seasons || []).forEach((s) => {
+      if (s.season_number > 0) seasonCounts[s.season_number] = s.episode_count;
+    });
+    return seasonCounts;
+  }
+
   async function selectTmdbResult(result) {
     const isMovie = result.media_type === "movie";
     const title = isMovie ? result.title : result.name;
@@ -860,7 +884,15 @@
       try {
         const details = await tmdbFetch(`/tv/${result.id}?language=en-US`);
         if (details.number_of_seasons) document.getElementById("f-total-seasons").value = details.number_of_seasons;
-        if (details.number_of_episodes) document.getElementById("f-total-episodes").value = details.number_of_episodes;
+        const seasonCounts = buildSeasonEpisodeCounts(details);
+        els.fSeasonEpisodeCounts.value = JSON.stringify(seasonCounts);
+        const currentSeasonNum = Number(els.fSeason.value) || 1;
+        if (seasonCounts[currentSeasonNum]) {
+          els.fTotalEpisodes.value = seasonCounts[currentSeasonNum];
+        } else if (details.number_of_episodes) {
+          // No per-season breakdown available; cumulative total is better than nothing.
+          els.fTotalEpisodes.value = details.number_of_episodes;
+        }
       } catch {
         // Season/episode totals are a nice-to-have; ignore failures silently.
       }
@@ -1469,9 +1501,35 @@
     els.fFranchise.value = t?.franchise || "";
     els.fTmdbId.value = t?.tmdbId ?? "";
     els.fTmdbMediaType.value = t?.tmdbMediaType || "";
+    els.fSeasonEpisodeCounts.value = JSON.stringify(t?.seasonEpisodeCounts || {});
 
     toggleSeasonFields();
     els.backdrop.hidden = false;
+
+    const hasSeasonCounts = t?.seasonEpisodeCounts && Object.keys(t.seasonEpisodeCounts).length > 0;
+    if (t && t.type === "SERIES" && t.tmdbId && t.tmdbMediaType === "tv" && !hasSeasonCounts) {
+      backfillSeasonEpisodeCounts(t);
+    }
+  }
+
+  // Fetches per-season episode counts in the background for a title that
+  // was linked to TMDB before this feature existed (or added without a
+  // season breakdown), so its "episodes in this season" total stops being
+  // the old series-wide cumulative number.
+  async function backfillSeasonEpisodeCounts(t) {
+    try {
+      const details = await tmdbFetch(`/tv/${t.tmdbId}?language=en-US`);
+      const seasonCounts = buildSeasonEpisodeCounts(details);
+      if (Object.keys(seasonCounts).length === 0) return;
+      t.seasonEpisodeCounts = seasonCounts;
+      saveTitles(titles);
+      if (state.modalTitleId !== t.id) return; // user moved on; data is saved, just don't touch the form
+      els.fSeasonEpisodeCounts.value = JSON.stringify(seasonCounts);
+      const seasonNum = Number(document.getElementById("f-season").value) || t.currentSeason || 1;
+      if (seasonCounts[seasonNum]) els.fTotalEpisodes.value = seasonCounts[seasonNum];
+    } catch {
+      // Leave it for manual entry.
+    }
   }
 
   function closeModal() {
@@ -1515,6 +1573,13 @@
       franchise: els.fFranchise.value.trim(),
       tmdbId: els.fTmdbId.value ? Number(els.fTmdbId.value) : null,
       tmdbMediaType: els.fTmdbMediaType.value || null,
+      seasonEpisodeCounts: (() => {
+        try {
+          return JSON.parse(els.fSeasonEpisodeCounts.value || "{}");
+        } catch {
+          return {};
+        }
+      })(),
     };
 
     const now = Date.now();
@@ -1611,6 +1676,16 @@
   els.form.addEventListener("submit", handleSubmit);
   els.deleteBtn.addEventListener("click", handleDelete);
   els.fType.addEventListener("change", toggleSeasonFields);
+  els.fSeason.addEventListener("change", () => {
+    let seasonCounts = {};
+    try {
+      seasonCounts = JSON.parse(els.fSeasonEpisodeCounts.value || "{}");
+    } catch {
+      // Treat an unparsable value the same as having no data.
+    }
+    const seasonNum = Number(els.fSeason.value);
+    if (seasonCounts[seasonNum]) els.fTotalEpisodes.value = seasonCounts[seasonNum];
+  });
   els.fName.addEventListener(
     "input",
     debounce((e) => searchTmdb(e.target.value), 400)
