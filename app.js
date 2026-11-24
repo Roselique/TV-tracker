@@ -120,6 +120,8 @@
     sort: "updated",
     modalTitleId: null,
     isAdding: false,
+    viewMode: "edit",
+    previewResult: null,
   };
 
   const els = {
@@ -142,12 +144,14 @@
     viewPoster: document.getElementById("view-poster"),
     viewPosterPlaceholder: document.getElementById("view-poster-placeholder"),
     viewStatusBadge: document.getElementById("view-status-badge"),
-    viewMeta: document.getElementById("view-meta"),
+    viewOverlayMeta: document.getElementById("view-overlay-meta"),
+    viewOverlayMain: document.getElementById("view-overlay-main"),
     viewTags: document.getElementById("view-tags"),
     viewOverview: document.getElementById("view-overview"),
     viewNotes: document.getElementById("view-notes"),
     viewWatchLink: document.getElementById("view-watch-link"),
     viewEditBtn: document.getElementById("view-edit-btn"),
+    viewEditBtnLabel: document.getElementById("view-edit-btn-label"),
     fOverview: document.getElementById("f-overview"),
     closeModal: document.getElementById("close-modal"),
     seasonFields: document.getElementById("season-fields"),
@@ -1296,7 +1300,12 @@
     const episodeBadge = r._episodeInfo
       ? `<span class="discover-card-episode">S${r._episodeInfo.season} · E${r._episodeInfo.episode}</span>`
       : "";
-    const clickable = r._localTitleId ? ` data-open-library="${r._localTitleId}" role="button" tabindex="0"` : "";
+    let clickable = "";
+    if (opts.directEdit && r._localTitleId) {
+      clickable = ` data-open-library="${r._localTitleId}" role="button" tabindex="0"`;
+    } else if (opts.previewOnClick) {
+      clickable = ` data-preview-key="${r.media_type}:${r.id}" role="button" tabindex="0"`;
+    }
     return `
     <div class="discover-card${opts.useBackdrop ? " discover-card-wide" : ""}">
       <div class="discover-card-poster"${clickable}>
@@ -1349,6 +1358,21 @@
         }
       });
     });
+    el.querySelectorAll("[data-preview-key]").forEach((poster) => {
+      const openPreview = () => {
+        const [mediaType, idStr] = poster.dataset.previewKey.split(":");
+        const id = Number(idStr);
+        const result = items.find((r) => r.id === id && r.media_type === mediaType);
+        if (result) openDiscoverPreview(result);
+      };
+      poster.addEventListener("click", openPreview);
+      poster.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openPreview();
+        }
+      });
+    });
     updateCarouselArrows(el);
     el.addEventListener("scroll", () => updateCarouselArrows(el));
   }
@@ -1390,16 +1414,17 @@
     ].join("");
 
     const trendingItems = discoverTrendingTab === "movie" ? discoverData.trendingMovie : discoverData.trendingTv;
-    renderCarouselRow("discover-trending-row", trendingItems, { ranked: true });
+    renderCarouselRow("discover-trending-row", trendingItems, { ranked: true, previewOnClick: true });
     renderCarouselRow("discover-airing-row", discoverData.latestEpisodes, {
       useBackdrop: true,
       useAiredMeta: true,
+      directEdit: true,
       emptyMessage:
         discoverData.latestEpisodesEmptyReason ||
         "No recent episode info found for the series you're tracking.",
     });
-    renderCarouselRow("discover-popular-row", discoverData.popularMovies);
-    renderCarouselRow("discover-top-rated-row", discoverData.topRatedTv);
+    renderCarouselRow("discover-popular-row", discoverData.popularMovies, { previewOnClick: true });
+    renderCarouselRow("discover-top-rated-row", discoverData.topRatedTv, { previewOnClick: true });
 
     els.discoverCarousels.querySelectorAll("[data-trend-tab]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1490,6 +1515,8 @@
     const t = titles.find((x) => x.id === id);
     if (!t) return;
     state.modalTitleId = id;
+    state.viewMode = "edit";
+    state.previewResult = null;
     hideTmdbResults();
 
     els.form.hidden = true;
@@ -1508,16 +1535,14 @@
       els.viewPoster.style.display = "none";
       els.viewPosterPlaceholder.style.display = "";
     }
+    els.viewStatusBadge.hidden = false;
     els.viewStatusBadge.style.background = icon.color;
     els.viewStatusBadge.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13">${icon.svg}</svg>`;
 
-    const metaParts = [];
-    if (t.year) metaParts.push(String(t.year));
-    metaParts.push(t.type === "MOVIE" ? "Movie" : "Series");
-    if (t.tmdbScore != null) metaParts.push(`★ ${Math.round(t.tmdbScore * 10)}%`);
-    if (t.myScore != null) metaParts.push(`♥ ${t.myScore}`);
-    metaParts.push(progressLabel(t));
-    els.viewMeta.textContent = metaParts.join(" · ");
+    const metaLine = scoreMetaLine(t);
+    els.viewOverlayMeta.textContent = metaLine;
+    els.viewOverlayMeta.hidden = !metaLine;
+    els.viewOverlayMain.textContent = progressLabel(t);
 
     els.viewTags.innerHTML = (t.tags || [])
       .map((tag) => `<span class="chip-tag">${escapeHtml(tag)}</span>`)
@@ -1540,13 +1565,84 @@
       els.viewWatchLink.hidden = true;
     }
 
+    els.viewEditBtnLabel.textContent = "Edit details";
+    els.viewEditBtn.title = "Edit details";
+
     els.backdrop.hidden = false;
     maybeBackfillTitle(t);
+  }
+
+  // Shows the same quick-view panel for a TMDB search result that isn't
+  // in the library yet (e.g. a Discover carousel card) — poster, score,
+  // genres, and synopsis, with a footer button to add it straight to
+  // Plan to Watch. If it's already been added, opens the real tracked
+  // view instead so progress/notes aren't hidden behind a preview.
+  function openDiscoverPreview(result) {
+    if (isAlreadyAdded(result)) {
+      const existing = titles.find(
+        (x) => x.tmdbId === result.id && x.tmdbMediaType === result.media_type
+      );
+      if (existing) {
+        openTitleView(existing.id);
+        return;
+      }
+    }
+
+    const isMovie = result.media_type === "movie";
+    const title = isMovie ? result.title : result.name;
+    const dateStr = isMovie ? result.release_date : result.first_air_date;
+    const year = dateStr ? dateStr.slice(0, 4) : "";
+
+    state.modalTitleId = null;
+    state.viewMode = "add";
+    state.previewResult = result;
+    hideTmdbResults();
+
+    els.form.hidden = true;
+    els.deleteBtn.hidden = true;
+    els.submitBtn.hidden = true;
+    els.titleView.hidden = false;
+    els.modalTitle.textContent = title;
+
+    if (result.poster_path) {
+      els.viewPoster.src = `${TMDB_POSTER_FULL}${result.poster_path}`;
+      els.viewPoster.alt = title;
+      els.viewPoster.style.display = "";
+      els.viewPosterPlaceholder.style.display = "none";
+    } else {
+      els.viewPoster.style.display = "none";
+      els.viewPosterPlaceholder.style.display = "";
+    }
+    els.viewStatusBadge.hidden = true;
+
+    const metaParts = [];
+    if (year) metaParts.push(year);
+    if (result.vote_average) metaParts.push(`★ ${Math.round(result.vote_average * 10)}%`);
+    els.viewOverlayMeta.textContent = metaParts.join(" · ");
+    els.viewOverlayMeta.hidden = metaParts.length === 0;
+    els.viewOverlayMain.textContent = isMovie ? "Movie" : "Series";
+
+    const genreMap = isMovie ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES;
+    const genreNames = (result.genre_ids || []).map((id) => genreMap[id]).filter(Boolean);
+    els.viewTags.innerHTML = genreNames
+      .map((tag) => `<span class="chip-tag">${escapeHtml(tag)}</span>`)
+      .join("");
+
+    els.viewOverview.textContent = result.overview || "No synopsis available for this title.";
+    els.viewNotes.hidden = true;
+    els.viewWatchLink.hidden = true;
+
+    els.viewEditBtnLabel.textContent = "Add to Plan to Watch";
+    els.viewEditBtn.title = "Add to Plan to Watch";
+
+    els.backdrop.hidden = false;
   }
 
   function openModal(id) {
     state.modalTitleId = id || null;
     state.isAdding = !id;
+    state.viewMode = "edit";
+    state.previewResult = null;
     const t = id ? titles.find((x) => x.id === id) : null;
     hideTmdbResults();
 
@@ -1652,6 +1748,8 @@
   function closeModal() {
     els.backdrop.hidden = true;
     state.modalTitleId = null;
+    state.viewMode = "edit";
+    state.previewResult = null;
   }
 
   function handleSubmit(e) {
@@ -1777,7 +1875,14 @@
   els.backdrop.addEventListener("click", (e) => {
     if (e.target === els.backdrop) closeModal();
   });
-  els.viewEditBtn.addEventListener("click", () => openModal(state.modalTitleId));
+  els.viewEditBtn.addEventListener("click", () => {
+    if (state.viewMode === "add" && state.previewResult) {
+      quickAddFromDiscover(state.previewResult);
+      closeModal();
+    } else {
+      openModal(state.modalTitleId);
+    }
+  });
   els.closeCollectionModal.addEventListener("click", closeCollectionModal);
   els.collectionBackdrop.addEventListener("click", (e) => {
     if (e.target === els.collectionBackdrop) closeCollectionModal();

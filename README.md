@@ -87,21 +87,28 @@ says so and your tracked library underneath is completely unaffected.
 
 ## Viewing and editing a title
 
-Clicking a card in the library opens a quick-view panel first — poster,
-status, year, scores, genre tags, your progress, your notes, and a
-synopsis, plus a "watch now" link if you've set one. It's there so you can
-remind yourself what something's about without jumping into the edit form.
-Click **Edit details** (the arrow) to switch to the full form for that
-title. Opening a collection stack, a franchise entry, or a card from the
-Discover row's Latest Episodes still goes straight to the edit form, since
-those are usually opened to update progress rather than to read the
-synopsis.
+Clicking a card in the library opens a quick-view panel first — just the
+poster, genre tags, and synopsis, with your status, rating, and progress
+shown as a small badge over the poster (the same badge style as the grid)
+rather than cluttering the panel. It's there so you can remind yourself
+what something's about without the edit form getting in the way. Click
+**Edit details** (the arrow) to switch to the full form for that title.
+Opening a collection stack, a franchise entry, or a card from the Discover
+row's Latest Episodes still goes straight to the edit form, since those
+are usually opened to update progress rather than to read the synopsis.
 
 The synopsis is filled in automatically from TMDB — picking a search result
 while adding a title grabs it immediately, and existing titles that are
 linked to TMDB but missing one get it fetched quietly in the background the
 first time you open them. You can also write or edit it by hand in the
 Synopsis field.
+
+Cards in the Discover section's **Trending Today**, **Popular Movies**,
+and **Top Rated Series** rows work the same way for anything not yet in
+your library — click one to see its poster, score, genres, and synopsis,
+with an **Add to Plan to Watch** button instead of Edit details. If it's
+already in your library, clicking it opens your real tracked view instead
+of a preview.
 
 ## Adding a title
 

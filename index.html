@@ -93,9 +93,12 @@
           <img id="view-poster" alt="" />
           <div class="poster-placeholder" id="view-poster-placeholder"><svg viewBox="0 0 24 24" width="28" height="28"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>
           <span class="status-badge" id="view-status-badge"></span>
+          <span class="progress-overlay" id="view-progress-overlay">
+            <span class="progress-overlay-meta" id="view-overlay-meta"></span>
+            <span class="progress-overlay-main" id="view-overlay-main"></span>
+          </span>
         </div>
         <div class="view-info">
-          <div class="view-meta" id="view-meta"></div>
           <div class="view-tags" id="view-tags"></div>
           <p class="view-overview" id="view-overview"></p>
           <p class="view-notes" id="view-notes" hidden></p>
@@ -106,7 +109,7 @@
         </div>
       </div>
       <button type="button" class="view-edit-btn" id="view-edit-btn" title="Edit details">
-        <span>Edit details</span>
+        <span id="view-edit-btn-label">Edit details</span>
         <svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>

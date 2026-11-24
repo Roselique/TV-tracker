@@ -452,6 +452,7 @@ select:focus, input:focus, textarea:focus { border-color: var(--blue); }
   color: white;
 }
 .status-badge svg { display: block; }
+.status-badge[hidden] { display: none; }
 
 .watch-link {
   position: absolute;
@@ -573,6 +574,7 @@ select:focus, input:focus, textarea:focus { border-color: var(--blue); }
 .icon-btn:hover { background: var(--surface-raised); color: var(--foreground); }
 
 #title-form { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+#title-form[hidden] { display: none; }
 .field { display: flex; flex-direction: column; gap: 4px; position: relative; }
 .tmdb-field { margin-bottom: 0; }
 .tmdb-hint {
@@ -694,8 +696,8 @@ select:focus, input:focus, textarea:focus { border-color: var(--blue); }
   color: white;
   display: flex; align-items: center; justify-content: center;
 }
+.view-poster-wrap .progress-overlay { padding-right: 8px; }
 .view-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.view-meta { font-size: 13px; color: var(--muted); }
 .view-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .view-tags .chip-tag {
   display: inline-block;
