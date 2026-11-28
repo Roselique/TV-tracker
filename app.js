@@ -794,19 +794,40 @@
     els.tmdbResults.hidden = true;
     els.tmdbResults.innerHTML = "";
     els.tmdbHint.hidden = true;
+    tmdbSearchResults = [];
+    tmdbSelectedIndices = new Set();
   }
 
   function isAlreadyAdded(result) {
     return titles.some((t) => t.tmdbId === result.id && t.tmdbMediaType === result.media_type);
   }
 
+  // Lets several search results (e.g. all the movies in a franchise) be
+  // checked off and added at once, skipping the edit form for each one.
+  let tmdbSearchResults = [];
+  let tmdbSelectedIndices = new Set();
+
+  function addSelectedTmdbResults() {
+    const toAdd = [...tmdbSelectedIndices]
+      .map((i) => tmdbSearchResults[i])
+      .filter((r) => r && !isAlreadyAdded(r));
+    if (toAdd.length === 0) return;
+    toAdd.forEach((r) => titles.unshift(buildTitleFromTmdbResult(r)));
+    saveTitles(titles);
+    render();
+    renderDiscoverSections();
+    closeModal();
+  }
+
   function renderTmdbResults(results) {
+    tmdbSearchResults = results;
+    tmdbSelectedIndices = new Set();
     if (results.length === 0) {
       els.tmdbResults.innerHTML = '<p class="tmdb-empty">No matches found — you can still fill this in by hand.</p>';
       els.tmdbResults.hidden = false;
       return;
     }
-    els.tmdbResults.innerHTML = results
+    const rows = results
       .map((r, i) => {
         const title = r.media_type === "movie" ? r.title : r.name;
         const date = r.media_type === "movie" ? r.release_date : r.first_air_date;
@@ -815,25 +836,58 @@
         const poster = r.poster_path
           ? `<img class="tmdb-result-poster" src="${TMDB_POSTER_LIST}${r.poster_path}" alt="" />`
           : `<span class="tmdb-result-poster-placeholder"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></span>`;
-        const addedBadge = isAlreadyAdded(r)
+        const trailing = isAlreadyAdded(r)
           ? `<span class="tmdb-result-added" title="Already in your library"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
-          : "";
+          : `<input type="checkbox" class="tmdb-result-check" data-check-index="${i}" title="Select to add along with others" />`;
         return `
-        <button type="button" class="tmdb-result" data-index="${i}">
+        <div class="tmdb-result" role="button" tabindex="0" data-index="${i}">
           ${poster}
           <span class="tmdb-result-info">
             <span class="tmdb-result-title">${escapeHtml(title)}</span>
             <span class="tmdb-result-meta">${typeLabel} · ${year}</span>
           </span>
-          ${addedBadge}
-        </button>`;
+          ${trailing}
+        </div>`;
       })
       .join("");
+    els.tmdbResults.innerHTML =
+      rows +
+      `<div class="tmdb-multi-add-bar" id="tmdb-multi-add-bar" hidden>
+        <span id="tmdb-multi-add-count"></span>
+        <button type="button" class="btn btn-primary" id="tmdb-multi-add-btn">Add selected</button>
+      </div>`;
     els.tmdbResults.hidden = false;
 
-    els.tmdbResults.querySelectorAll("[data-index]").forEach((btn) => {
-      btn.addEventListener("click", () => selectTmdbResult(results[Number(btn.dataset.index)]));
+    els.tmdbResults.querySelectorAll(".tmdb-result[data-index]").forEach((row) => {
+      const i = Number(row.dataset.index);
+      const openSingle = () => selectTmdbResult(results[i]);
+      row.addEventListener("click", openSingle);
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openSingle();
+        }
+      });
     });
+
+    const bar = document.getElementById("tmdb-multi-add-bar");
+    const countEl = document.getElementById("tmdb-multi-add-count");
+    const updateBar = () => {
+      const n = tmdbSelectedIndices.size;
+      bar.hidden = n === 0;
+      countEl.textContent = n === 1 ? "1 selected" : `${n} selected`;
+    };
+    els.tmdbResults.querySelectorAll("[data-check-index]").forEach((checkbox) => {
+      checkbox.addEventListener("click", (e) => e.stopPropagation());
+      checkbox.addEventListener("change", () => {
+        const i = Number(checkbox.dataset.checkIndex);
+        if (checkbox.checked) tmdbSelectedIndices.add(i);
+        else tmdbSelectedIndices.delete(i);
+        updateBar();
+      });
+    });
+    document.getElementById("tmdb-multi-add-btn").addEventListener("click", addSelectedTmdbResults);
+    updateBar();
   }
 
   async function searchTmdb(query) {
@@ -1248,8 +1302,10 @@
     return `<button type="button" class="btn btn-primary" data-hero-add="1"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> Add to Plan to Watch</button>`;
   }
 
-  function quickAddFromDiscover(result) {
-    if (isAlreadyAdded(result)) return;
+  // Builds a fresh library entry from a TMDB search/discover result,
+  // defaulting to Plan to Watch with whatever TMDB data is available
+  // filled in — used for one-click adds that skip the edit form.
+  function buildTitleFromTmdbResult(result) {
     const isMovie = result.media_type === "movie";
     const now = Date.now();
     const t = {
@@ -1278,7 +1334,12 @@
       updatedAt: now,
     };
     applyTmdbMatchToTitle(t, result);
-    titles.unshift(t);
+    return t;
+  }
+
+  function quickAddFromDiscover(result) {
+    if (isAlreadyAdded(result)) return;
+    titles.unshift(buildTitleFromTmdbResult(result));
     saveTitles(titles);
     render();
     renderDiscoverSections();

@@ -128,6 +128,13 @@ everything in by hand. Add the where-to-watch link and your current
 season/episode, then save. Click any card afterwards to update your
 progress or status, or to delete it.
 
+Adding a whole franchise at once (e.g. searching "Spider-Man" and getting
+several movies back) doesn't mean adding them one by one — check the box
+next to each result you want, then click **Add selected** to add all of
+them straight to Plan to Watch in one go, with poster, year, score, and
+synopsis filled in from TMDB. Already-added results show the usual
+checkmark instead of a checkbox, since they can't be added twice.
+
 Titles added before this existed (or added without a season breakdown)
 show their old all-time total until you open them again — opening a
 series' edit view quietly fetches the real per-season counts from TMDB
