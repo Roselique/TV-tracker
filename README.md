@@ -92,10 +92,12 @@ poster, genre tags, and synopsis, with your status, rating, and progress
 shown as a small badge over the poster (the same badge style as the grid)
 rather than cluttering the panel. It's there so you can remind yourself
 what something's about without the edit form getting in the way. Click
-**Edit details** (the arrow) to switch to the full form for that title.
-Opening a collection stack, a franchise entry, or a card from the Discover
-row's Latest Episodes still goes straight to the edit form, since those
-are usually opened to update progress rather than to read the synopsis.
+**Edit details** (the arrow) to switch to the full form for that title. If
+you've set a "where to watch" link, a **Go watch** button appears right
+below it and opens that link in a new tab. Opening a collection stack, a
+franchise entry, or a card from the Discover row's Latest Episodes still
+goes straight to the edit form, since those are usually opened to update
+progress rather than to read the synopsis.
 
 The synopsis is filled in automatically from TMDB — picking a search result
 while adding a title grabs it immediately, and existing titles that are

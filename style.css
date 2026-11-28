@@ -718,8 +718,7 @@ select:focus, input:focus, textarea:focus { border-color: var(--blue); }
   color: var(--muted);
 }
 .view-notes[hidden] { display: none; }
-.view-watch-link { align-self: flex-start; margin-top: auto; }
-.view-watch-link[hidden] { display: none; }
+.view-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
 .view-edit-btn {
   display: flex;
   align-items: center;
@@ -734,8 +733,17 @@ select:focus, input:focus, textarea:focus { border-color: var(--blue); }
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 .view-edit-btn:hover { background: var(--border-subtle); }
+.view-watch-btn {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: white;
+}
+.view-watch-btn:hover { background: var(--blue-hover); }
+.view-watch-btn[hidden] { display: none; }
 
 .collection-list {
   display: flex;

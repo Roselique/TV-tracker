@@ -102,16 +102,18 @@
           <div class="view-tags" id="view-tags"></div>
           <p class="view-overview" id="view-overview"></p>
           <p class="view-notes" id="view-notes" hidden></p>
-          <a class="btn btn-ghost view-watch-link" id="view-watch-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
-            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M14 4h6v6M20 4l-9 9M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Watch now
-          </a>
         </div>
       </div>
-      <button type="button" class="view-edit-btn" id="view-edit-btn" title="Edit details">
-        <span id="view-edit-btn-label">Edit details</span>
-        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+      <div class="view-actions">
+        <button type="button" class="view-edit-btn" id="view-edit-btn" title="Edit details">
+          <span id="view-edit-btn-label">Edit details</span>
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <a class="view-edit-btn view-watch-btn" id="view-watch-btn" href="#" target="_blank" rel="noopener noreferrer" title="Go watch" hidden>
+          <span>Go watch</span>
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </div>
     </div>
     <form id="title-form">
       <div class="field tmdb-field">

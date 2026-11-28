@@ -149,7 +149,7 @@
     viewTags: document.getElementById("view-tags"),
     viewOverview: document.getElementById("view-overview"),
     viewNotes: document.getElementById("view-notes"),
-    viewWatchLink: document.getElementById("view-watch-link"),
+    viewWatchBtn: document.getElementById("view-watch-btn"),
     viewEditBtn: document.getElementById("view-edit-btn"),
     viewEditBtnLabel: document.getElementById("view-edit-btn-label"),
     fOverview: document.getElementById("f-overview"),
@@ -1559,10 +1559,10 @@
     }
 
     if (t.watchUrl) {
-      els.viewWatchLink.href = t.watchUrl;
-      els.viewWatchLink.hidden = false;
+      els.viewWatchBtn.href = t.watchUrl;
+      els.viewWatchBtn.hidden = false;
     } else {
-      els.viewWatchLink.hidden = true;
+      els.viewWatchBtn.hidden = true;
     }
 
     els.viewEditBtnLabel.textContent = "Edit details";
@@ -1630,7 +1630,7 @@
 
     els.viewOverview.textContent = result.overview || "No synopsis available for this title.";
     els.viewNotes.hidden = true;
-    els.viewWatchLink.hidden = true;
+    els.viewWatchBtn.hidden = true;
 
     els.viewEditBtnLabel.textContent = "Add to Plan to Watch";
     els.viewEditBtn.title = "Add to Plan to Watch";
